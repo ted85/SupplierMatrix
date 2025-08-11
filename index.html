@@ -23,4 +23,112 @@
     .supplier-card{background:linear-gradient(135deg,#f8fafc 0%,#e2e8f0 100%);border-radius:12px;padding:20px;margin:15px 0;border-left:4px solid #667eea;transition:.3s}
     .supplier-card:hover{transform:translateX(5px);box-shadow:0 10px 25px rgba(0,0,0,.1)}
     .supplier-name{font-size:1.3em;font-weight:700;color:#2d3748;margin-bottom:8px}
-    .supplier-details{color:#4a5
+    .supplier-details{color:#4a5568;font-size:.95em}
+    .distance{font-weight:700;color:#667eea}
+    .no-results{text-align:center;color:#718096;font-style:italic;padding:40px}
+    .loading{text-align:center;padding:20px;color:#667eea;animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎯 Supplier Selection System</h1>
+    <div class="input-section">
+      <h3>📍 Customer Location & Requirements</h3>
+      <div class="postcode-input">
+        <label for="postcode"><strong>Customer Postcode:</strong></label>
+        <input type="text" id="postcode" placeholder="e.g., NG6 8WA" value="NG6 8WA">
+        <button class="btn" onclick="findSuppliers()">🔍 Find Suppliers</button>
+        <button class="btn" onclick="clearAll()">🗑️ Clear All</button>
+      </div>
+      <h4>Services Required:</h4>
+      <div class="services-grid" id="servicesGrid"></div>
+    </div>
+
+    <div class="results-section">
+      <h3>📋 Matching Suppliers (Ranked by Distance)</h3>
+      <div id="results">
+        <div class="no-results">Select services and click "Find Suppliers" to see results</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const suppliers = [
+      {name:"PrintCorp Ltd",postcode:"NG7 2RD",services:["B1","B2","Litho","Large Format","Digi","Finishing","Binding","Paper","Mailing"],phone:"0115 123 4567",email:"orders@printcorp.co.uk"},
+      {name:"Design & Print Solutions",postcode:"NG8 1AB",services:["B1","B3","Digi","Screen Printing","Vinyls","Signage","POS","Web"],phone:"0115 234 5678",email:"info@designprint.co.uk"},
+      {name:"PromoMax",postcode:"NG5 7QW",services:["Promo","Lanyards & Wristbands","Clothing","Bags","Confectionary"],phone:"0115 345 6789",email:"sales@promomax.co.uk"},
+      {name:"FlexiPrint Systems",postcode:"NG9 3TY",services:["Flexo","Labels","Packaging","Tissue Paper","Boxes","Envelopes"],phone:"0115 456 7890",email:"orders@flexiprint.co.uk"},
+      {name:"Digital Express",postcode:"NG6 5ER",services:["B1","B2","B3","Digi","Indigo","Finishing","Binding","Courier"],phone:"0115 567 8901",email:"express@digitalprint.co.uk"},
+      {name:"Exhibition Specialists",postcode:"NG4 2WX",services:["Large Format","Exhibitions","Signage","POS","Vinyls","Mounting"],phone:"0115 678 9012",email:"info@exhbspec.co.uk"},
+      {name:"Complete Print Services",postcode:"NG11 8ZA",services:["B1","Litho","Digi","Binding","Finishing","Paper","Mailing","Fulfillment"],phone:"0115 789 0123",email:"complete@printservices.co.uk"}
+    ];
+    const services = ["B1","B2","B3","Litho","Large Format","Digi","Flexo","Indigo","Screen Printing","Finishing","Vinyls","Binding","Clothing","Labels","Promo","Lanyards & Wristbands","Packaging","Tissue Paper","Boxes","Bags","Envelopes","Signage","Exhibitions","POS","Web","Foil","Paper","Mailing","Fulfillment","Confectionary","Courier"];
+
+    function calculateDistance(_,postcode2){
+      const distances = {"NG7 2RD":2.3,"NG8 1AB":4.1,"NG5 7QW":3.7,"NG9 3TY":6.2,"NG6 5ER":1.8,"NG4 2WX":5.5,"NG11 8ZA":8.9};
+      return distances[postcode2] || Math.random()*10+1;
+    }
+
+    function initializeServices(){
+      const grid=document.getElementById('servicesGrid'); grid.innerHTML='';
+      services.forEach(service=>{
+        const div=document.createElement('div'); div.className='service-item'; div.onclick=()=>toggleService(service,div);
+        div.innerHTML=`<input type="checkbox" id="service-${service}" onchange="toggleService('${service}', this.parentElement)"><label for="service-${service}">${service}</label>`;
+        grid.appendChild(div);
+      });
+    }
+
+    function toggleService(_,element){
+      const cb=element.querySelector('input[type="checkbox"]'); cb.checked=!cb.checked;
+      cb.checked?element.classList.add('selected'):element.classList.remove('selected');
+    }
+
+    function getSelectedServices(){
+      const cbs=document.querySelectorAll('#servicesGrid input[type="checkbox"]:checked');
+      return Array.from(cbs).map(cb=>cb.id.replace('service-',''));
+    }
+
+    function findSuppliers(){
+      const customerPostcode=document.getElementById('postcode').value.trim();
+      const selectedServices=getSelectedServices();
+      const resultsDiv=document.getElementById('results');
+
+      if(!customerPostcode){resultsDiv.innerHTML='<div class="no-results">Please enter a customer postcode</div>';return;}
+      if(selectedServices.length===0){resultsDiv.innerHTML='<div class="no-results">Please select at least one service</div>';return;}
+
+      resultsDiv.innerHTML='<div class="loading">🔍 Searching for suppliers...</div>';
+      setTimeout(()=>{
+        const matching=suppliers.filter(s=>selectedServices.every(sv=>s.services.includes(sv)));
+        if(matching.length===0){resultsDiv.innerHTML='<div class="no-results">No suppliers found that can provide all selected services</div>';return;}
+        const withDist=matching.map(s=>({...s,distance:calculateDistance(customerPostcode,s.postcode)})).sort((a,b)=>a.distance-b.distance);
+        let html=`<p><strong>Found ${withDist.length} supplier(s) for services: ${selectedServices.join(', ')}</strong></p>`;
+        withDist.forEach((s,i)=>{html+=`
+          <div class="supplier-card">
+            <div class="supplier-name">${i+1}. ${s.name}</div>
+            <div class="supplier-details">
+              📍 <strong>Postcode:</strong> ${s.postcode} |
+              📏 <strong>Distance:</strong> <span class="distance">${s.distance.toFixed(1)} km</span><br>
+              📞 <strong>Phone:</strong> ${s.phone} |
+              📧 <strong>Email:</strong> ${s.email}<br>
+              🛠️ <strong>Services:</strong> ${s.services.join(', ')}
+            </div>
+          </div>`;});
+        resultsDiv.innerHTML=html;
+      },800);
+    }
+
+    function clearAll(){
+      document.getElementById('postcode').value='';
+      document.querySelectorAll('#servicesGrid input[type="checkbox"]').forEach(cb=>{cb.checked=false;cb.parentElement.classList.remove('selected');});
+      document.getElementById('results').innerHTML='<div class="no-results">Select services and click "Find Suppliers" to see results</div>';
+    }
+
+    window.onload=()=>{
+      initializeServices();
+      document.getElementById('service-B1').checked=true;document.getElementById('service-B1').parentElement.classList.add('selected');
+      document.getElementById('service-Promo').checked=true;document.getElementById('service-Promo').parentElement.classList.add('selected');
+    };
+  </script>
+</body>
+</html>
