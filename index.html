@@ -1,134 +1,97 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Supplier Selection System</title>
-  <style>
-    body{font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:20px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh}
-    .container{max-width:1200px;margin:0 auto;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-radius:20px;padding:30px;box-shadow:0 20px 40px rgba(0,0,0,.1)}
-    h1{text-align:center;color:#4a5568;margin-bottom:30px;font-size:2.5em;background:linear-gradient(45deg,#667eea,#764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-    .input-section{background:#fff;padding:25px;border-radius:15px;margin-bottom:25px;box-shadow:0 10px 25px rgba(0,0,0,.08);border:1px solid rgba(102,126,234,.2)}
-    .postcode-input{display:flex;gap:15px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
-    input[type=text]{padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:16px;transition:.3s;min-width:150px}
-    input[type=text]:focus{outline:none;border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,.1)}
-    .services-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-top:20px}
-    .service-item{display:flex;align-items:center;padding:12px;background:#f8fafc;border-radius:8px;transition:.3s;cursor:pointer}
-    .service-item:hover{background:#e6fffa;transform:translateY(-2px)}
-    .service-item.selected{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
-    input[type=checkbox]{margin-right:10px;transform:scale(1.2);cursor:pointer}
-    .btn{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;padding:12px 24px;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;transition:.3s;margin:10px 5px}
-    .btn:hover{transform:translateY(-2px);box-shadow:0 10px 25px rgba(102,126,234,.4)}
-    .results-section{background:#fff;padding:25px;border-radius:15px;box-shadow:0 10px 25px rgba(0,0,0,.08);border:1px solid rgba(102,126,234,.2)}
-    .supplier-card{background:linear-gradient(135deg,#f8fafc 0%,#e2e8f0 100%);border-radius:12px;padding:20px;margin:15px 0;border-left:4px solid #667eea;transition:.3s}
-    .supplier-card:hover{transform:translateX(5px);box-shadow:0 10px 25px rgba(0,0,0,.1)}
-    .supplier-name{font-size:1.3em;font-weight:700;color:#2d3748;margin-bottom:8px}
-    .supplier-details{color:#4a5568;font-size:.95em}
-    .distance{font-weight:700;color:#667eea}
-    .no-results{text-align:center;color:#718096;font-style:italic;padding:40px}
-    .loading{text-align:center;padding:20px;color:#667eea;animation:pulse 2s infinite}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🎯 Supplier Selection System</h1>
-    <div class="input-section">
-      <h3>📍 Customer Location & Requirements</h3>
-      <div class="postcode-input">
-        <label for="postcode"><strong>Customer Postcode:</strong></label>
-        <input type="text" id="postcode" placeholder="e.g., NG6 8WA" value="NG6 8WA">
-        <button class="btn" onclick="findSuppliers()">🔍 Find Suppliers</button>
-        <button class="btn" onclick="clearAll()">🗑️ Clear All</button>
-      </div>
-      <h4>Services Required:</h4>
-      <div class="services-grid" id="servicesGrid"></div>
-    </div>
+<script>
+  // ---- Postcode + distance helpers ----
+  const pcCache = new Map(JSON.parse(localStorage.getItem("pcCache") || "[]"));
+  const saveCache = () => localStorage.setItem("pcCache", JSON.stringify([...pcCache]));
 
-    <div class="results-section">
-      <h3>📋 Matching Suppliers (Ranked by Distance)</h3>
-      <div id="results">
-        <div class="no-results">Select services and click "Find Suppliers" to see results</div>
-      </div>
-    </div>
-  </div>
+  const normalisePC = pc =>
+    pc.trim().toUpperCase().replace(/\s+/g, "").replace(/^([A-Z]{1,2}\d[A-Z\d]?\d[A-Z]{2})$/, (_, g)=> {
+      // put the space back before the incode (last 3 chars)
+      return g.slice(0, g.length - 3) + " " + g.slice(-3);
+    });
 
-  <script>
-    const suppliers = [
-      {name:"PrintCorp Ltd",postcode:"NG7 2RD",services:["B1","B2","Litho","Large Format","Digi","Finishing","Binding","Paper","Mailing"],phone:"0115 123 4567",email:"orders@printcorp.co.uk"},
-      {name:"Design & Print Solutions",postcode:"NG8 1AB",services:["B1","B3","Digi","Screen Printing","Vinyls","Signage","POS","Web"],phone:"0115 234 5678",email:"info@designprint.co.uk"},
-      {name:"PromoMax",postcode:"NG5 7QW",services:["Promo","Lanyards & Wristbands","Clothing","Bags","Confectionary"],phone:"0115 345 6789",email:"sales@promomax.co.uk"},
-      {name:"FlexiPrint Systems",postcode:"NG9 3TY",services:["Flexo","Labels","Packaging","Tissue Paper","Boxes","Envelopes"],phone:"0115 456 7890",email:"orders@flexiprint.co.uk"},
-      {name:"Digital Express",postcode:"NG6 5ER",services:["B1","B2","B3","Digi","Indigo","Finishing","Binding","Courier"],phone:"0115 567 8901",email:"express@digitalprint.co.uk"},
-      {name:"Exhibition Specialists",postcode:"NG4 2WX",services:["Large Format","Exhibitions","Signage","POS","Vinyls","Mounting"],phone:"0115 678 9012",email:"info@exhbspec.co.uk"},
-      {name:"Complete Print Services",postcode:"NG11 8ZA",services:["B1","Litho","Digi","Binding","Finishing","Paper","Mailing","Fulfillment"],phone:"0115 789 0123",email:"complete@printservices.co.uk"}
-    ];
-    const services = ["B1","B2","B3","Litho","Large Format","Digi","Flexo","Indigo","Screen Printing","Finishing","Vinyls","Binding","Clothing","Labels","Promo","Lanyards & Wristbands","Packaging","Tissue Paper","Boxes","Bags","Envelopes","Signage","Exhibitions","POS","Web","Foil","Paper","Mailing","Fulfillment","Confectionary","Courier"];
+  async function geocode(postcode) {
+    const pc = normalisePC(postcode);
+    if (pcCache.has(pc)) return pcCache.get(pc);
+    const res = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(pc)}`);
+    const data = await res.json();
+    if (data.status !== 200 || !data.result) throw new Error("Geocode failed for " + pc);
+    const ll = { lat: data.result.latitude, lon: data.result.longitude, pc };
+    pcCache.set(pc, ll); saveCache();
+    return ll;
+  }
 
-    function calculateDistance(_,postcode2){
-      const distances = {"NG7 2RD":2.3,"NG8 1AB":4.1,"NG5 7QW":3.7,"NG9 3TY":6.2,"NG6 5ER":1.8,"NG4 2WX":5.5,"NG11 8ZA":8.9};
-      return distances[postcode2] || Math.random()*10+1;
-    }
+  function haversineKm(a, b) {
+    const R = 6371, toRad = d => d * Math.PI / 180;
+    const dLat = toRad(b.lat - a.lat);
+    const dLon = toRad(b.lon - a.lon);
+    const la1 = toRad(a.lat), la2 = toRad(b.lat);
+    const h = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
+    return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  }
 
-    function initializeServices(){
-      const grid=document.getElementById('servicesGrid'); grid.innerHTML='';
-      services.forEach(service=>{
-        const div=document.createElement('div'); div.className='service-item'; div.onclick=()=>toggleService(service,div);
-        div.innerHTML=`<input type="checkbox" id="service-${service}" onchange="toggleService('${service}', this.parentElement)"><label for="service-${service}">${service}</label>`;
-        grid.appendChild(div);
-      });
-    }
+  async function osrmDrivingKm(a, b) {
+    const url = `https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=false`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data || data.code !== "Ok" || !data.routes?.length) throw new Error("OSRM failed");
+    return data.routes[0].distance / 1000; // metres -> km
+  }
 
-    function toggleService(_,element){
-      const cb=element.querySelector('input[type="checkbox"]'); cb.checked=!cb.checked;
-      cb.checked?element.classList.add('selected'):element.classList.remove('selected');
-    }
+  async function bestDistanceKm(fromPc, toPc) {
+    const [A, B] = await Promise.all([geocode(fromPc), geocode(toPc)]);
+    try { return await osrmDrivingKm(A, B); }
+    catch { return haversineKm(A, B); } // graceful fallback
+  }
 
-    function getSelectedServices(){
-      const cbs=document.querySelectorAll('#servicesGrid input[type="checkbox"]:checked');
-      return Array.from(cbs).map(cb=>cb.id.replace('service-',''));
-    }
-
-    function findSuppliers(){
-      const customerPostcode=document.getElementById('postcode').value.trim();
-      const selectedServices=getSelectedServices();
-      const resultsDiv=document.getElementById('results');
-
-      if(!customerPostcode){resultsDiv.innerHTML='<div class="no-results">Please enter a customer postcode</div>';return;}
-      if(selectedServices.length===0){resultsDiv.innerHTML='<div class="no-results">Please select at least one service</div>';return;}
-
-      resultsDiv.innerHTML='<div class="loading">🔍 Searching for suppliers...</div>';
-      setTimeout(()=>{
-        const matching=suppliers.filter(s=>selectedServices.every(sv=>s.services.includes(sv)));
-        if(matching.length===0){resultsDiv.innerHTML='<div class="no-results">No suppliers found that can provide all selected services</div>';return;}
-        const withDist=matching.map(s=>({...s,distance:calculateDistance(customerPostcode,s.postcode)})).sort((a,b)=>a.distance-b.distance);
-        let html=`<p><strong>Found ${withDist.length} supplier(s) for services: ${selectedServices.join(', ')}</strong></p>`;
-        withDist.forEach((s,i)=>{html+=`
-          <div class="supplier-card">
-            <div class="supplier-name">${i+1}. ${s.name}</div>
-            <div class="supplier-details">
-              📍 <strong>Postcode:</strong> ${s.postcode} |
-              📏 <strong>Distance:</strong> <span class="distance">${s.distance.toFixed(1)} km</span><br>
-              📞 <strong>Phone:</strong> ${s.phone} |
-              📧 <strong>Email:</strong> ${s.email}<br>
-              🛠️ <strong>Services:</strong> ${s.services.join(', ')}
-            </div>
-          </div>`;});
-        resultsDiv.innerHTML=html;
-      },800);
-    }
-
-    function clearAll(){
-      document.getElementById('postcode').value='';
-      document.querySelectorAll('#servicesGrid input[type="checkbox"]').forEach(cb=>{cb.checked=false;cb.parentElement.classList.remove('selected');});
-      document.getElementById('results').innerHTML='<div class="no-results">Select services and click "Find Suppliers" to see results</div>';
-    }
-
-    window.onload=()=>{
-      initializeServices();
-      document.getElementById('service-B1').checked=true;document.getElementById('service-B1').parentElement.classList.add('selected');
-      document.getElementById('service-Promo').checked=true;document.getElementById('service-Promo').parentElement.classList.add('selected');
+  // simple concurrency limiter so we don’t hammer OSRM
+  function pLimit(n) {
+    let active = 0, q = [];
+    const next = () => {
+      if (active >= n || q.length === 0) return;
+      active++;
+      const {fn, resolve, reject} = q.shift();
+      fn().then(resolve, reject).finally(() => { active--; next(); });
     };
-  </script>
-</body>
-</html>
+    return fn => new Promise((resolve, reject) => { q.push({fn, resolve, reject}); next(); });
+  }
+  const limit5 = pLimit(5);
+
+  // ---- Use it in your findSuppliers() ----
+  async function findSuppliers() {
+    const customerPostcode = document.getElementById('postcode').value.trim();
+    const selectedServices = getSelectedServices();
+    const resultsDiv = document.getElementById('results');
+
+    if (!customerPostcode) { resultsDiv.innerHTML = '<div class="no-results">Please enter a customer postcode</div>'; return; }
+    if (selectedServices.length === 0) { resultsDiv.innerHTML = '<div class="no-results">Please select at least one service</div>'; return; }
+
+    resultsDiv.innerHTML = '<div class="loading">🔍 Calculating driving distances…</div>';
+
+    const matchingSuppliers = suppliers.filter(s => selectedServices.every(sv => s.services.includes(sv)));
+    if (!matchingSuppliers.length) { resultsDiv.innerHTML = '<div class="no-results">No suppliers found that can provide all selected services</div>'; return; }
+
+    // compute distances with a small concurrency cap
+    const enriched = await Promise.all(matchingSuppliers.map(s => 
+      limit5(() => bestDistanceKm(customerPostcode, s.postcode)
+        .then(km => ({...s, distance: km}))
+        .catch(() => ({...s, distance: Infinity}))
+      )
+    ));
+
+    const sorted = enriched.filter(s => isFinite(s.distance)).sort((a,b)=>a.distance-b.distance);
+
+    let html = `<p><strong>Found ${sorted.length} supplier(s) for services: ${selectedServices.join(', ')}</strong></p>`;
+    sorted.forEach((s,i) => { html += `
+      <div class="supplier-card">
+        <div class="supplier-name">${i+1}. ${s.name}</div>
+        <div class="supplier-details">
+          📍 <strong>Postcode:</strong> ${s.postcode} |
+          📏 <strong>Driving distance:</strong> <span class="distance">${s.distance.toFixed(1)} km</span><br>
+          📞 <strong>Phone:</strong> ${s.phone} | 📧 <strong>Email:</strong> ${s.email}<br>
+          🛠️ <strong>Services:</strong> ${s.services.join(', ')}
+        </div>
+      </div>`; 
+    });
+    resultsDiv.innerHTML = html || '<div class="no-results">Couldn’t compute distances. Try again.</div>';
+  }
+</script>
