@@ -4,16 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Supplier Selection System</title>
-  <!--
-    Distance logic:
-      • Geocoding: https://api.postcodes.io/postcodes/{POSTCODE} (no key, CORS OK)
-      • Driving distance: https://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}
-      • Fallback: Haversine straight-line distance (km)
-    Notes:
-      • Public OSRM is rate-limited; fine for light team use. For heavier traffic, use your own OSRM
-        or a paid provider (Mapbox/Google) via a tiny serverless proxy to keep the API key secret.
-      • Geocode results are cached in localStorage to keep it snappy.
-  -->
   <style>
     :root { --grad1:#667eea; --grad2:#764ba2; --ink:#2d3748; --muted:#4a5568; }
     *{box-sizing:border-box}
@@ -60,7 +50,7 @@
     </div>
 
     <div class="results-section">
-      <h3>📋 Matching Suppliers (Ranked by Distance)</h3>
+      <h3>📋 Matching Suppliers (Top 3 by Distance)</h3>
       <div id="results">
         <div class="no-results">Select services and click "Find Suppliers" to see results</div>
       </div>
@@ -142,11 +132,13 @@
         grid.appendChild(div);
       });
     }
+
     function toggleService(element) {
       const checkbox = element.querySelector('input[type="checkbox"]');
       checkbox.checked = !checkbox.checked;
       checkbox.checked ? element.classList.add('selected') : element.classList.remove('selected');
     }
+
     function getSelectedServices() {
       return Array.from(document.querySelectorAll('#servicesGrid input[type="checkbox"]:checked'))
                   .map(cb => cb.id.replace('service-',''));
@@ -220,10 +212,20 @@
 
       resultsDiv.innerHTML = '<div class="loading">🔍 Calculating driving distances…</div>';
 
-      const matching = suppliers.filter(s => selectedServices.every(sv => s.services.includes(sv)));
-      if (matching.length === 0) { resultsDiv.innerHTML = '<div class="no-results">No suppliers found that can provide all selected services</div>'; return; }
+      // Match ANY of the selected services (at least one overlap)
+      const matching = suppliers.filter(s =>
+        selectedServices.some(sv => s.services.includes(sv))
+      );
 
-      // compute distances with a small concurrency cap
+      if (matching.length === 0) {
+        resultsDiv.innerHTML = `<div class="no-results">
+          No suppliers found for selected services: ${selectedServices.join(', ')}.
+          Try selecting fewer or different services.
+        </div>`;
+        return;
+      }
+
+      // Compute distances with a small concurrency cap
       const enriched = await Promise.all(matching.map(s =>
         limit5(() => bestDistanceKm(customerPostcode, s.postcode)
           .then(km => ({ ...s, distance: km }))
@@ -231,16 +233,25 @@
         )
       ));
 
-      const sorted = enriched.filter(s => isFinite(s.distance)).sort((a,b)=>a.distance-b.distance);
+      // Sort by distance, treating non-finite distances as very far (but we may include them if <3 finite)
+      enriched.sort((a, b) => {
+        const da = isFinite(a.distance) ? a.distance : Number.POSITIVE_INFINITY;
+        const db = isFinite(b.distance) ? b.distance : Number.POSITIVE_INFINITY;
+        return da - db;
+      });
 
-      let html = `<p><strong>Found ${sorted.length} supplier(s) for services: ${selectedServices.join(', ')}</strong></p>`;
-      sorted.forEach((s,i) => {
+      // Keep only the top 3. If fewer than 3 finite distances, we allow "N/A" entries to fill.
+      const top3 = enriched.slice(0, 3);
+
+      let html = `<p><strong>Showing up to 3 closest suppliers for: ${selectedServices.join(', ')}</strong></p>`;
+      top3.forEach((s,i) => {
+        const distText = isFinite(s.distance) ? `${s.distance.toFixed(1)} km` : 'N/A';
         html += `
           <div class="supplier-card">
             <div class="supplier-name">${i + 1}. ${s.name}</div>
             <div class="supplier-details">
               📍 <strong>Postcode:</strong> ${s.postcode} |
-              📏 <strong>Driving distance:</strong> <span class="distance">${s.distance.toFixed(1)} km</span><br>
+              📏 <strong>Driving distance:</strong> <span class="distance">${distText}</span><br>
               📞 <strong>Phone:</strong> ${s.phone} |
               📧 <strong>Email:</strong> ${s.email}<br>
               🛠️ <strong>Services:</strong> ${s.services.join(', ')}
@@ -263,12 +274,7 @@
 
     window.onload = () => {
       initializeServices();
-      // Optional: preselect a couple for demo
-      const pre = ["B1","Promo"];
-      pre.forEach(s => {
-        const el = document.getElementById(`service-${s}`);
-        if (el) { el.checked = true; el.parentElement.classList.add('selected'); }
-      });
+      // 🔧 Removed the previous demo pre-select of ["B1","Promo"]
     };
   </script>
 </body>
