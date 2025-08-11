@@ -58,8 +58,9 @@
   </div>
 
   <script>
-    // ----------- Sample supplier database -----------
-    const suppliers = [
+    // ----------- Supplier database -----------
+    // (Add "Browns" as in your example; adjust to your real list)
+    const suppliersRaw = [
       {
         name: "PrintCorp Ltd",
         postcode: "NG7 2RD",
@@ -108,20 +109,58 @@
         services: ["B1","Litho","Digi","Binding","Finishing","Paper","Mailing","Fulfillment"],
         phone: "0115 789 0123",
         email: "complete@printservices.co.uk"
+      },
+      {
+        name: "Browns",
+        postcode: "M24 1NN",
+        services: ["Digi","Litho","Finishing"],  // make sure "Digi" exists here
+        phone: "0161 000 0000",
+        email: "hello@browns.co.uk"
       }
     ];
 
-    const services = [
+    // Master list for UI (labels). Matching is case-insensitive with synonyms.
+    const servicesUI = [
       "B1","B2","B3","Litho","Large Format","Digi","Flexo","Indigo","Screen Printing","Finishing","Vinyls","Binding",
       "Clothing","Labels","Promo","Lanyards & Wristbands","Packaging","Tissue Paper","Boxes","Bags","Envelopes",
       "Signage","Exhibitions","POS","Web","Foil","Paper","Mailing","Fulfillment","Confectionary","Courier"
     ];
 
+    // ----------- Normalisers -----------
+    function normalisePC(pc) {
+      // "AA9 9AA" style: uppercase, single space before last 3
+      const t = pc.trim().toUpperCase().replace(/\s+/g, '');
+      if (t.length < 5) return pc.trim().toUpperCase(); // minimal sanity
+      return t.slice(0, t.length - 3) + ' ' + t.slice(-3);
+    }
+
+    // Normalise service names -> simple canonical tokens
+    const SERVICE_ALIASES = new Map([
+      ['digital','digi'],
+      ['dig', 'digi'],
+      ['wide format','large format'],
+      ['lf', 'large format'],
+      ['posm', 'pos']
+    ]);
+    function normaliseService(s) {
+      let t = s.toLowerCase().trim();
+      t = t.replace(/&/g, 'and').replace(/\s+/g, ' ');
+      if (SERVICE_ALIASES.has(t)) t = SERVICE_ALIASES.get(t);
+      return t; // e.g., "digi", "large format", "binding"
+    }
+
+    // Prepare suppliers with normalised fields up-front
+    const suppliers = suppliersRaw.map(s => ({
+      ...s,
+      postcode: normalisePC(s.postcode || ''),
+      _servicesNorm: new Set((s.services || []).map(normaliseService))
+    }));
+
     // ----------- UI init -----------
     function initializeServices() {
       const grid = document.getElementById('servicesGrid');
       grid.innerHTML = '';
-      services.forEach(service => {
+      servicesUI.forEach(service => {
         const div = document.createElement('div');
         div.className = 'service-item';
         div.onclick = () => toggleService(div);
@@ -132,28 +171,20 @@
         grid.appendChild(div);
       });
     }
-
     function toggleService(element) {
       const checkbox = element.querySelector('input[type="checkbox"]');
       checkbox.checked = !checkbox.checked;
       checkbox.checked ? element.classList.add('selected') : element.classList.remove('selected');
     }
-
-    function getSelectedServices() {
+    function getSelectedServicesNorm() {
       return Array.from(document.querySelectorAll('#servicesGrid input[type="checkbox"]:checked'))
-                  .map(cb => cb.id.replace('service-',''));
+        .map(cb => cb.id.replace('service-',''))
+        .map(normaliseService);
     }
 
     // ----------- Geocoding + distance helpers -----------
     const pcCache = new Map(JSON.parse(localStorage.getItem("pcCache") || "[]"));
     const saveCache = () => localStorage.setItem("pcCache", JSON.stringify([...pcCache]));
-
-    // Normalise to "AA9 9AA" style (reinsert space before incode)
-    function normalisePC(pc) {
-      const t = pc.trim().toUpperCase().replace(/\s+/g, '');
-      if (t.length < 5) return pc.trim().toUpperCase(); // minimal sanity
-      return t.slice(0, t.length - 3) + ' ' + t.slice(-3);
-    }
 
     async function geocode(postcode) {
       const pc = normalisePC(postcode);
@@ -203,64 +234,69 @@
 
     // ----------- Main flow -----------
     async function findSuppliers() {
-      const customerPostcode = document.getElementById('postcode').value.trim();
-      const selectedServices = getSelectedServices();
+      const customerPostcodeInput = document.getElementById('postcode').value.trim();
+      const customerPostcode = normalisePC(customerPostcodeInput);
+      const selectedServicesNorm = getSelectedServicesNorm();
       const resultsDiv = document.getElementById('results');
 
-      if (!customerPostcode) { resultsDiv.innerHTML = '<div class="no-results">Please enter a customer postcode</div>'; return; }
-      if (selectedServices.length === 0) { resultsDiv.innerHTML = '<div class="no-results">Please select at least one service</div>'; return; }
+      if (!customerPostcodeInput) { resultsDiv.innerHTML = '<div class="no-results">Please enter a customer postcode</div>'; return; }
+      if (selectedServicesNorm.length === 0) { resultsDiv.innerHTML = '<div class="no-results">Please select at least one service</div>'; return; }
 
       resultsDiv.innerHTML = '<div class="loading">🔍 Calculating driving distances…</div>';
 
-      // Match ANY of the selected services (at least one overlap)
+      // ANY-service match (case-insensitive, with simple synonyms)
       const matching = suppliers.filter(s =>
-        selectedServices.some(sv => s.services.includes(sv))
+        [...s._servicesNorm].some(svc => selectedServicesNorm.includes(svc))
       );
 
       if (matching.length === 0) {
         resultsDiv.innerHTML = `<div class="no-results">
-          No suppliers found for selected services: ${selectedServices.join(', ')}.
-          Try selecting fewer or different services.
+          No suppliers found for selected services: ${selectedServicesNorm.join(', ')}.
+          Check service spellings or synonyms in your dataset.
         </div>`;
         return;
       }
 
-      // Compute distances with a small concurrency cap
       const enriched = await Promise.all(matching.map(s =>
         limit5(() => bestDistanceKm(customerPostcode, s.postcode)
-          .then(km => ({ ...s, distance: km }))
-          .catch(() => ({ ...s, distance: Infinity }))
+          .then(km => ({ ...s, distance: km, _distanceErr: null }))
+          .catch(err => ({ ...s, distance: Infinity, _distanceErr: err?.message || 'Distance failed' }))
         )
       ));
 
-      // Sort by distance, treating non-finite distances as very far (but we may include them if <3 finite)
-      enriched.sort((a, b) => {
-        const da = isFinite(a.distance) ? a.distance : Number.POSITIVE_INFINITY;
-        const db = isFinite(b.distance) ? b.distance : Number.POSITIVE_INFINITY;
-        return da - db;
-      });
+      // Sort finite distances first; “N/A” at the end
+      const finite = enriched.filter(s => isFinite(s.distance)).sort((a,b)=>a.distance-b.distance);
+      const nonFinite = enriched.filter(s => !isFinite(s.distance));
 
-      // Keep only the top 3. If fewer than 3 finite distances, we allow "N/A" entries to fill.
-      const top3 = enriched.slice(0, 3);
+      // Keep top 3 finite; if fewer than 3, fill with nonFinite
+      const top = finite.slice(0, 3);
+      if (top.length < 3) top.push(...nonFinite.slice(0, 3 - top.length));
 
-      let html = `<p><strong>Showing up to 3 closest suppliers for: ${selectedServices.join(', ')}</strong></p>`;
-      top3.forEach((s,i) => {
+      let html = `<p><strong>Showing up to 3 closest suppliers for: ${selectedServicesNorm.join(', ')}</strong><br>
+                  Normalised postcode: <code>${customerPostcode}</code></p>`;
+
+      if (top.length === 0) {
+        resultsDiv.innerHTML = '<div class="no-results">No matches to display.</div>'; return;
+      }
+
+      top.forEach((s,i) => {
         const distText = isFinite(s.distance) ? `${s.distance.toFixed(1)} km` : 'N/A';
+        const errText = s._distanceErr ? ` <em>(distance lookup issue: ${s._distanceErr})</em>` : '';
         html += `
           <div class="supplier-card">
             <div class="supplier-name">${i + 1}. ${s.name}</div>
             <div class="supplier-details">
               📍 <strong>Postcode:</strong> ${s.postcode} |
-              📏 <strong>Driving distance:</strong> <span class="distance">${distText}</span><br>
+              📏 <strong>Driving distance:</strong> <span class="distance">${distText}</span>${errText}<br>
               📞 <strong>Phone:</strong> ${s.phone} |
               📧 <strong>Email:</strong> ${s.email}<br>
-              🛠️ <strong>Services:</strong> ${s.services.join(', ')}
+              🛠️ <strong>Services:</strong> ${[...s._servicesNorm].join(', ')}
             </div>
           </div>
         `;
       });
 
-      resultsDiv.innerHTML = html || '<div class="no-results">Couldn’t compute distances. Try again.</div>';
+      resultsDiv.innerHTML = html;
     }
 
     function clearAll() {
@@ -273,8 +309,7 @@
     }
 
     window.onload = () => {
-      initializeServices();
-      // 🔧 Removed the previous demo pre-select of ["B1","Promo"]
+      initializeServices(); // no demo preselects
     };
   </script>
 </body>
