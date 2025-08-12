@@ -29,7 +29,7 @@
     .distance{font-weight:700;color:var(--grad1)}
     .no-results{text-align:center;color:#718096;font-style:italic;padding:40px}
     .loading{text-align:center;padding:20px;color:var(--grad1);animation:pulse 2s infinite}
-    .debug{margin-top:16px;font-size:.9em;color:#4a5568;background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px}
+    .debug{margin-top:16px;font-size:.9em;color:#1f2937;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:10px}
     .err{color:#b91c1c}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
   </style>
@@ -49,7 +49,7 @@
 
       <h4>Services Required:</h4>
       <div class="services-grid" id="servicesGrid"></div>
-      <div id="debug" class="debug" hidden></div>
+      <div id="debug" class="debug" hidden>loading…</div>
     </div>
 
     <div class="results-section">
@@ -61,19 +61,30 @@
   </div>
 
   <script>
-    // ---------- Load ONLY from suppliers.json ----------
+    // --- Error banner so nothing fails silently ---
+    window.addEventListener('error', (e) => {
+      const dbg = document.getElementById('debug');
+      dbg.hidden = false;
+      dbg.innerHTML = `<span class="err">JS error: ${e.message}</span>`;
+    });
+
     let suppliers = [];
     const servicesSet = new Set();
 
-    // Tidy postcode: trims, removes NBSP and extra whitespace, inserts space before last 3 chars
+    // Build a robust URL for suppliers.json (handles subpaths)
+    function suppliersUrl() {
+      const u = new URL('suppliers.json', window.location.href);
+      // cache-bust to avoid GH Pages caching
+      u.searchParams.set('v', Date.now().toString());
+      return u.toString();
+    }
+
+    // Postcode normaliser
     function normalisePC(pc) {
       if (!pc) return '';
-      const cleaned = pc.replace(/\u00A0/g, ' ')  // NBSP -> space
-                        .replace(/\s+/g, ' ')     // collapse spaces
-                        .trim()
-                        .toUpperCase();
-      // handle "ONLINE" or blank -> return empty string
-      if (!cleaned || cleaned === 'ONLINE' || cleaned === 'EMAIL' || cleaned === 'ONLINE/EMAIL' || cleaned === 'ONLINE/EMAIL') return '';
+      const cleaned = String(pc).replace(/\u00A0/g, ' ')
+        .replace(/\s+/g, ' ').trim().toUpperCase();
+      if (!cleaned || /^ONLINE\b|^EMAIL\b/i.test(cleaned)) return '';
       const t = cleaned.replace(/\s+/g, '');
       if (t.length < 5) return cleaned;
       return t.slice(0, t.length - 3) + ' ' + t.slice(-3);
@@ -81,30 +92,28 @@
 
     async function loadSuppliers() {
       const dbg = document.getElementById('debug');
-      try {
-        const res = await fetch('suppliers.json', { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status} fetching suppliers.json`);
-        const raw = await res.json();
+      dbg.hidden = false;
+      dbg.textContent = 'Fetching suppliers.json…';
 
-        // map + clean
-        suppliers = raw.map(r => {
-          const pc = normalisePC(r.postcode);
-          const services = Array.isArray(r.services) ? r.services.map(s => String(s).trim()) : [];
-          return { name: r.name, postcode: pc, services };
-        }).filter(s => s.name); // keep named suppliers even if postcode missing
+      const url = suppliersUrl();
+      console.log('Fetching', url);
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status} fetching suppliers.json (${url})`);
+      const raw = await res.json();
 
-        // populate services list
-        suppliers.forEach(s => s.services.forEach(sv => servicesSet.add(sv)));
+      // Accept both "postcode" and "Postcode"
+      suppliers = raw.map(r => {
+        const pc = normalisePC(r.postcode ?? r.Postcode ?? r.POSTCODE ?? '');
+        const name = r.name ?? r.Supplier ?? r.supplier ?? '';
+        const services = Array.isArray(r.services) ? r.services.map(s => String(s).trim()) : [];
+        return { name, postcode: pc, services };
+      }).filter(s => s.name);
 
-        dbg.hidden = false;
-        dbg.innerHTML = `<strong>Dataset loaded:</strong> ${suppliers.length} suppliers, ${servicesSet.size} services.`;
-      } catch (e) {
-        const msg = `❌ Failed to load suppliers.json — ${e.message}. 
-        Make sure suppliers.json is in the same folder as index.html and GitHub Pages has finished building.`;
-        document.getElementById('debug').hidden = false;
-        document.getElementById('debug').innerHTML = `<span class="err">${msg}</span>`;
-        throw e; // hard stop so we don't accidentally use any demo data
-      }
+      suppliers.forEach(s => s.services.forEach(sv => servicesSet.add(sv)));
+
+      const msg = `Dataset loaded: ${suppliers.length} suppliers, ${servicesSet.size} services.`;
+      console.log(msg);
+      dbg.textContent = msg;
     }
 
     function initializeServices() {
@@ -113,7 +122,11 @@
       [...servicesSet].sort().forEach(service => {
         const div = document.createElement('div');
         div.className = 'service-item';
-        div.onclick = () => toggleService(div);
+        div.onclick = () => {
+          const cb = div.querySelector('input');
+          cb.checked = !cb.checked;
+          div.classList.toggle('selected', cb.checked);
+        };
         div.innerHTML = `
           <input type="checkbox" id="service-${service}">
           <label for="service-${service}">${service}</label>
@@ -122,18 +135,12 @@
       });
     }
 
-    function toggleService(element) {
-      const checkbox = element.querySelector('input[type="checkbox"]');
-      checkbox.checked = !checkbox.checked;
-      checkbox.checked ? element.classList.add('selected') : element.classList.remove('selected');
-    }
-
     function getSelectedServices() {
       return Array.from(document.querySelectorAll('#servicesGrid input[type="checkbox"]:checked'))
-                  .map(cb => cb.id.replace('service-',''));
+        .map(cb => cb.id.replace('service-',''));
     }
 
-    // ---------- Geocoding + distance ----------
+    // --- Geocoding + distance ---
     const pcCache = new Map(JSON.parse(localStorage.getItem("pcCache") || "[]"));
     const saveCache = () => localStorage.setItem("pcCache", JSON.stringify([...pcCache]));
 
@@ -171,7 +178,7 @@
       catch { return haversineKm(A, B); }
     }
 
-    // ---------- Main ----------
+    // --- Main flow ---
     async function findSuppliers() {
       const rawPC = document.getElementById('postcode').value.trim();
       const customerPostcode = normalisePC(rawPC);
@@ -184,7 +191,6 @@
 
       resultsDiv.innerHTML = '<div class="loading">🔍 Calculating driving distances…</div>';
 
-      // ANY service match
       const matching = suppliers.filter(s => selectedServices.some(sv => s.services.includes(sv)));
 
       if (matching.length === 0) {
@@ -192,7 +198,6 @@
         return;
       }
 
-      // Compute distances; keep suppliers even if distance fails
       const enriched = await Promise.all(matching.map(async s => {
         try {
           const km = await bestDistanceKm(customerPostcode, s.postcode);
@@ -202,7 +207,6 @@
         }
       }));
 
-      // Sort: finite first, then N/A; take top 3
       const sorted = enriched.sort((a, b) => {
         if (a.distance === null && b.distance !== null) return 1;
         if (a.distance !== null && b.distance === null) return -1;
@@ -210,7 +214,6 @@
         return a.distance - b.distance;
       }).slice(0, 3);
 
-      // Debug info to prove dataset + matches
       dbg.hidden = false;
       dbg.innerHTML = `
         <strong>Debug:</strong>
@@ -218,11 +221,11 @@
         Matched suppliers: ${matching.length} • Showing: ${sorted.length}
       `;
 
-      // Render
       let html = `<p><strong>Showing up to 3 closest suppliers for: ${selectedServices.join(', ')}</strong><br>
                   Normalised postcode: <code>${customerPostcode}</code></p>`;
       sorted.forEach((s, i) => {
-        const distText = (s.distance !== null) ? `${s.distance.toFixed(1)} km` : `N/A${s._err ? ` <em>(distance lookup issue: ${s._err})</em>` : ''}`;
+        const distText = (s.distance !== null) ? `${s.distance.toFixed(1)} km` :
+          `N/A${s._err ? ` <em>(distance lookup issue: ${s._err})</em>` : ''}`;
         html += `
           <div class="supplier-card">
             <div class="supplier-name">${i + 1}. ${s.name}</div>
@@ -248,8 +251,15 @@
     }
 
     window.onload = async () => {
-      await loadSuppliers();   // throws if JSON missing — prevents accidental fallback
-      initializeServices();
+      try {
+        await loadSuppliers();      // load data first
+        initializeServices();       // then UI
+      } catch (e) {
+        const dbg = document.getElementById('debug');
+        dbg.hidden = false;
+        dbg.innerHTML = `<span class="err">Startup failed: ${e.message}</span>`;
+        console.error(e);
+      }
     };
   </script>
 </body>
