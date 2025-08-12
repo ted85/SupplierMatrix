@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Supplier Selection System</title>
   <style>
-    /* same styles you already had */
     :root { --grad1:#667eea; --grad2:#764ba2; --ink:#2d3748; --muted:#4a5568; }
     *{box-sizing:border-box}
     body{font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:20px;background:linear-gradient(135deg,var(--grad1) 0%,var(--grad2) 100%);min-height:100vh}
@@ -94,7 +93,7 @@
                   .map(cb => cb.id.replace('service-',''));
     }
 
-    // ----- Postcode + Distance functions -----
+    // ----- Postcode + Distance helpers -----
     const pcCache = new Map(JSON.parse(localStorage.getItem("pcCache") || "[]"));
     const saveCache = () => localStorage.setItem("pcCache", JSON.stringify([...pcCache]));
 
@@ -137,18 +136,6 @@
       catch { return haversineKm(A, B); }
     }
 
-    function pLimit(n) {
-      let active = 0, q = [];
-      const next = () => {
-        if (active >= n || q.length === 0) return;
-        active++;
-        const { fn, resolve, reject } = q.shift();
-        fn().then(resolve, reject).finally(() => { active--; next(); });
-      };
-      return fn => new Promise((resolve, reject) => { q.push({ fn, resolve, reject }); next(); });
-    }
-    const limit5 = pLimit(5);
-
     // ----- Main -----
     async function findSuppliers() {
       const customerPostcode = document.getElementById('postcode').value.trim();
@@ -160,25 +147,38 @@
 
       resultsDiv.innerHTML = '<div class="loading">🔍 Calculating driving distances…</div>';
 
+      // Match ANY selected service
       const matching = suppliers.filter(s =>
         selectedServices.some(sv => s.services.includes(sv))
       );
 
-      if (matching.length === 0) { resultsDiv.innerHTML = '<div class="no-results">No suppliers found for selected services</div>'; return; }
+      if (matching.length === 0) {
+        resultsDiv.innerHTML = '<div class="no-results">No suppliers found for selected services</div>';
+        return;
+      }
 
-      const enriched = await Promise.all(matching.map(s =>
-        limit5(() => bestDistanceKm(customerPostcode, s.postcode)
-          .then(km => ({ ...s, distance: km }))
-          .catch(() => ({ ...s, distance: Infinity }))
-        )
-      ));
+      // Calculate distances but keep supplier even if it fails
+      const enriched = await Promise.all(matching.map(async s => {
+        try {
+          const km = await bestDistanceKm(customerPostcode, s.postcode);
+          return { ...s, distance: km };
+        } catch (err) {
+          console.warn(`Distance lookup failed for ${s.name} (${s.postcode}):`, err.message);
+          return { ...s, distance: null };
+        }
+      }));
 
-      const sorted = enriched.sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity))
-                             .slice(0, 3); // top 3 only
+      // Sort: finite distances first, then N/A, then top 3
+      const sorted = enriched.sort((a, b) => {
+        if (a.distance === null && b.distance !== null) return 1;
+        if (a.distance !== null && b.distance === null) return -1;
+        if (a.distance === null && b.distance === null) return 0;
+        return a.distance - b.distance;
+      }).slice(0, 3);
 
-      let html = `<p><strong>Found ${sorted.length} closest supplier(s) for services: ${selectedServices.join(', ')}</strong></p>`;
-      sorted.forEach((s,i) => {
-        const distText = isFinite(s.distance) ? `${s.distance.toFixed(1)} km` : 'N/A';
+      let html = `<p><strong>Showing ${sorted.length} supplier(s) for: ${selectedServices.join(', ')}</strong></p>`;
+      sorted.forEach((s, i) => {
+        const distText = (s.distance !== null) ? `${s.distance.toFixed(1)} km` : 'N/A';
         html += `
           <div class="supplier-card">
             <div class="supplier-name">${i + 1}. ${s.name}</div>
