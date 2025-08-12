@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Supplier Selection System</title>
   <style>
+    /* same styles you already had */
     :root { --grad1:#667eea; --grad2:#764ba2; --ink:#2d3748; --muted:#4a5568; }
     *{box-sizing:border-box}
     body{font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:20px;background:linear-gradient(135deg,var(--grad1) 0%,var(--grad2) 100%);min-height:100vh}
@@ -40,7 +41,7 @@
       <h3>📍 Customer Location & Requirements</h3>
       <div class="postcode-input">
         <label for="postcode"><strong>Customer Postcode:</strong></label>
-        <input type="text" id="postcode" placeholder="e.g., NG6 8WA" value="">
+        <input type="text" id="postcode" placeholder="e.g., NG6 8WA">
         <button class="btn" onclick="findSuppliers()">🔍 Find Suppliers</button>
         <button class="btn" onclick="clearAll()">🗑️ Clear All</button>
       </div>
@@ -58,109 +59,19 @@
   </div>
 
   <script>
-    // ----------- Supplier database -----------
-    // (Add "Browns" as in your example; adjust to your real list)
-    const suppliersRaw = [
-      {
-        name: "PrintCorp Ltd",
-        postcode: "NG7 2RD",
-        services: ["B1","B2","Litho","Large Format","Digi","Finishing","Binding","Paper","Mailing"],
-        phone: "0115 123 4567",
-        email: "orders@printcorp.co.uk"
-      },
-      {
-        name: "Design & Print Solutions",
-        postcode: "NG8 1AB",
-        services: ["B1","B3","Digi","Screen Printing","Vinyls","Signage","POS","Web"],
-        phone: "0115 234 5678",
-        email: "info@designprint.co.uk"
-      },
-      {
-        name: "PromoMax",
-        postcode: "NG5 7QW",
-        services: ["Promo","Lanyards & Wristbands","Clothing","Bags","Confectionary"],
-        phone: "0115 345 6789",
-        email: "sales@promomax.co.uk"
-      },
-      {
-        name: "FlexiPrint Systems",
-        postcode: "NG9 3TY",
-        services: ["Flexo","Labels","Packaging","Tissue Paper","Boxes","Envelopes"],
-        phone: "0115 456 7890",
-        email: "orders@flexiprint.co.uk"
-      },
-      {
-        name: "Digital Express",
-        postcode: "NG6 5ER",
-        services: ["B1","B2","B3","Digi","Indigo","Finishing","Binding","Courier"],
-        phone: "0115 567 8901",
-        email: "express@digitalprint.co.uk"
-      },
-      {
-        name: "Exhibition Specialists",
-        postcode: "NG4 2WX",
-        services: ["Large Format","Exhibitions","Signage","POS","Vinyls","Mounting"],
-        phone: "0115 678 9012",
-        email: "info@exhbspec.co.uk"
-      },
-      {
-        name: "Complete Print Services",
-        postcode: "NG11 8ZA",
-        services: ["B1","Litho","Digi","Binding","Finishing","Paper","Mailing","Fulfillment"],
-        phone: "0115 789 0123",
-        email: "complete@printservices.co.uk"
-      },
-      {
-        name: "Browns",
-        postcode: "M24 1NN",
-        services: ["Digi","Litho","Finishing"],  // make sure "Digi" exists here
-        phone: "0161 000 0000",
-        email: "hello@browns.co.uk"
-      }
-    ];
+    let suppliers = [];
+    const servicesSet = new Set();
 
-    // Master list for UI (labels). Matching is case-insensitive with synonyms.
-    const servicesUI = [
-      "B1","B2","B3","Litho","Large Format","Digi","Flexo","Indigo","Screen Printing","Finishing","Vinyls","Binding",
-      "Clothing","Labels","Promo","Lanyards & Wristbands","Packaging","Tissue Paper","Boxes","Bags","Envelopes",
-      "Signage","Exhibitions","POS","Web","Foil","Paper","Mailing","Fulfillment","Confectionary","Courier"
-    ];
-
-    // ----------- Normalisers -----------
-    function normalisePC(pc) {
-      // "AA9 9AA" style: uppercase, single space before last 3
-      const t = pc.trim().toUpperCase().replace(/\s+/g, '');
-      if (t.length < 5) return pc.trim().toUpperCase(); // minimal sanity
-      return t.slice(0, t.length - 3) + ' ' + t.slice(-3);
+    async function loadSuppliers() {
+      const res = await fetch('suppliers.json');
+      suppliers = await res.json();
+      suppliers.forEach(s => s.services.forEach(sv => servicesSet.add(sv)));
     }
 
-    // Normalise service names -> simple canonical tokens
-    const SERVICE_ALIASES = new Map([
-      ['digital','digi'],
-      ['dig', 'digi'],
-      ['wide format','large format'],
-      ['lf', 'large format'],
-      ['posm', 'pos']
-    ]);
-    function normaliseService(s) {
-      let t = s.toLowerCase().trim();
-      t = t.replace(/&/g, 'and').replace(/\s+/g, ' ');
-      if (SERVICE_ALIASES.has(t)) t = SERVICE_ALIASES.get(t);
-      return t; // e.g., "digi", "large format", "binding"
-    }
-
-    // Prepare suppliers with normalised fields up-front
-    const suppliers = suppliersRaw.map(s => ({
-      ...s,
-      postcode: normalisePC(s.postcode || ''),
-      _servicesNorm: new Set((s.services || []).map(normaliseService))
-    }));
-
-    // ----------- UI init -----------
     function initializeServices() {
       const grid = document.getElementById('servicesGrid');
       grid.innerHTML = '';
-      servicesUI.forEach(service => {
+      [...servicesSet].sort().forEach(service => {
         const div = document.createElement('div');
         div.className = 'service-item';
         div.onclick = () => toggleService(div);
@@ -171,20 +82,27 @@
         grid.appendChild(div);
       });
     }
+
     function toggleService(element) {
       const checkbox = element.querySelector('input[type="checkbox"]');
       checkbox.checked = !checkbox.checked;
       checkbox.checked ? element.classList.add('selected') : element.classList.remove('selected');
     }
-    function getSelectedServicesNorm() {
+
+    function getSelectedServices() {
       return Array.from(document.querySelectorAll('#servicesGrid input[type="checkbox"]:checked'))
-        .map(cb => cb.id.replace('service-',''))
-        .map(normaliseService);
+                  .map(cb => cb.id.replace('service-',''));
     }
 
-    // ----------- Geocoding + distance helpers -----------
+    // ----- Postcode + Distance functions -----
     const pcCache = new Map(JSON.parse(localStorage.getItem("pcCache") || "[]"));
     const saveCache = () => localStorage.setItem("pcCache", JSON.stringify([...pcCache]));
+
+    function normalisePC(pc) {
+      const t = pc.trim().toUpperCase().replace(/\s+/g, '');
+      if (t.length < 5) return pc.trim().toUpperCase();
+      return t.slice(0, t.length - 3) + ' ' + t.slice(-3);
+    }
 
     async function geocode(postcode) {
       const pc = normalisePC(postcode);
@@ -210,16 +128,15 @@
       const res = await fetch(url);
       const data = await res.json();
       if (!data || data.code !== "Ok" || !data.routes?.length) throw new Error("OSRM failed");
-      return data.routes[0].distance / 1000; // metres -> km
+      return data.routes[0].distance / 1000;
     }
 
     async function bestDistanceKm(fromPc, toPc) {
       const [A, B] = await Promise.all([geocode(fromPc), geocode(toPc)]);
       try { return await osrmDrivingKm(A, B); }
-      catch { return haversineKm(A, B); } // graceful fallback
+      catch { return haversineKm(A, B); }
     }
 
-    // Small concurrency limiter so we don’t hammer OSRM
     function pLimit(n) {
       let active = 0, q = [];
       const next = () => {
@@ -232,65 +149,43 @@
     }
     const limit5 = pLimit(5);
 
-    // ----------- Main flow -----------
+    // ----- Main -----
     async function findSuppliers() {
-      const customerPostcodeInput = document.getElementById('postcode').value.trim();
-      const customerPostcode = normalisePC(customerPostcodeInput);
-      const selectedServicesNorm = getSelectedServicesNorm();
+      const customerPostcode = document.getElementById('postcode').value.trim();
+      const selectedServices = getSelectedServices();
       const resultsDiv = document.getElementById('results');
 
-      if (!customerPostcodeInput) { resultsDiv.innerHTML = '<div class="no-results">Please enter a customer postcode</div>'; return; }
-      if (selectedServicesNorm.length === 0) { resultsDiv.innerHTML = '<div class="no-results">Please select at least one service</div>'; return; }
+      if (!customerPostcode) { resultsDiv.innerHTML = '<div class="no-results">Please enter a customer postcode</div>'; return; }
+      if (selectedServices.length === 0) { resultsDiv.innerHTML = '<div class="no-results">Please select at least one service</div>'; return; }
 
       resultsDiv.innerHTML = '<div class="loading">🔍 Calculating driving distances…</div>';
 
-      // ANY-service match (case-insensitive, with simple synonyms)
       const matching = suppliers.filter(s =>
-        [...s._servicesNorm].some(svc => selectedServicesNorm.includes(svc))
+        selectedServices.some(sv => s.services.includes(sv))
       );
 
-      if (matching.length === 0) {
-        resultsDiv.innerHTML = `<div class="no-results">
-          No suppliers found for selected services: ${selectedServicesNorm.join(', ')}.
-          Check service spellings or synonyms in your dataset.
-        </div>`;
-        return;
-      }
+      if (matching.length === 0) { resultsDiv.innerHTML = '<div class="no-results">No suppliers found for selected services</div>'; return; }
 
       const enriched = await Promise.all(matching.map(s =>
         limit5(() => bestDistanceKm(customerPostcode, s.postcode)
-          .then(km => ({ ...s, distance: km, _distanceErr: null }))
-          .catch(err => ({ ...s, distance: Infinity, _distanceErr: err?.message || 'Distance failed' }))
+          .then(km => ({ ...s, distance: km }))
+          .catch(() => ({ ...s, distance: Infinity }))
         )
       ));
 
-      // Sort finite distances first; “N/A” at the end
-      const finite = enriched.filter(s => isFinite(s.distance)).sort((a,b)=>a.distance-b.distance);
-      const nonFinite = enriched.filter(s => !isFinite(s.distance));
+      const sorted = enriched.sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity))
+                             .slice(0, 3); // top 3 only
 
-      // Keep top 3 finite; if fewer than 3, fill with nonFinite
-      const top = finite.slice(0, 3);
-      if (top.length < 3) top.push(...nonFinite.slice(0, 3 - top.length));
-
-      let html = `<p><strong>Showing up to 3 closest suppliers for: ${selectedServicesNorm.join(', ')}</strong><br>
-                  Normalised postcode: <code>${customerPostcode}</code></p>`;
-
-      if (top.length === 0) {
-        resultsDiv.innerHTML = '<div class="no-results">No matches to display.</div>'; return;
-      }
-
-      top.forEach((s,i) => {
+      let html = `<p><strong>Found ${sorted.length} closest supplier(s) for services: ${selectedServices.join(', ')}</strong></p>`;
+      sorted.forEach((s,i) => {
         const distText = isFinite(s.distance) ? `${s.distance.toFixed(1)} km` : 'N/A';
-        const errText = s._distanceErr ? ` <em>(distance lookup issue: ${s._distanceErr})</em>` : '';
         html += `
           <div class="supplier-card">
             <div class="supplier-name">${i + 1}. ${s.name}</div>
             <div class="supplier-details">
               📍 <strong>Postcode:</strong> ${s.postcode} |
-              📏 <strong>Driving distance:</strong> <span class="distance">${distText}</span>${errText}<br>
-              📞 <strong>Phone:</strong> ${s.phone} |
-              📧 <strong>Email:</strong> ${s.email}<br>
-              🛠️ <strong>Services:</strong> ${[...s._servicesNorm].join(', ')}
+              📏 <strong>Driving distance:</strong> <span class="distance">${distText}</span><br>
+              🛠️ <strong>Services:</strong> ${s.services.join(', ')}
             </div>
           </div>
         `;
@@ -308,8 +203,9 @@
       document.getElementById('results').innerHTML = '<div class="no-results">Select services and click "Find Suppliers" to see results</div>';
     }
 
-    window.onload = () => {
-      initializeServices(); // no demo preselects
+    window.onload = async () => {
+      await loadSuppliers();
+      initializeServices();
     };
   </script>
 </body>
