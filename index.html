@@ -9,26 +9,28 @@
     *{box-sizing:border-box}
     body{font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:20px;background:linear-gradient(135deg,var(--grad1) 0%,var(--grad2) 100%);min-height:100vh}
     .container{max-width:1200px;margin:0 auto;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-radius:20px;padding:30px;box-shadow:0 20px 40px rgba(0,0,0,.1)}
-    h1{text-align:center;color:var(--ink);margin-bottom:30px;font-size:2.5em;background:linear-gradient(45deg,var(--grad1),var(--grad2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    h1{text-align:center;color:var(--ink);margin-bottom:30px;font-size:2.2em;background:linear-gradient(45deg,var(--grad1),var(--grad2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
     .input-section{background:#fff;padding:25px;border-radius:15px;margin-bottom:25px;box-shadow:0 10px 25px rgba(0,0,0,.08);border:1px solid rgba(102,126,234,.2)}
     .postcode-input{display:flex;gap:15px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
     input[type=text]{padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:16px;transition:.3s;min-width:150px}
     input[type=text]:focus{outline:none;border-color:var(--grad1);box-shadow:0 0 0 3px rgba(102,126,234,.1)}
-    .services-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-top:20px}
-    .service-item{display:flex;align-items:center;padding:12px;background:#f8fafc;border-radius:8px;transition:.3s;cursor:pointer}
+    .services-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-top:10px}
+    .service-item{display:flex;align-items:center;padding:10px;background:#f8fafc;border-radius:8px;transition:.3s;cursor:pointer}
     .service-item:hover{background:#e6fffa;transform:translateY(-2px)}
     .service-item.selected{background:linear-gradient(135deg,var(--grad1),var(--grad2));color:#fff}
-    input[type=checkbox]{margin-right:10px;transform:scale(1.2);cursor:pointer}
-    .btn{background:linear-gradient(135deg,var(--grad1),var(--grad2));color:#fff;border:none;padding:12px 24px;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;transition:.3s;margin:10px 5px}
+    input[type=checkbox]{margin-right:10px;transform:scale(1.1);cursor:pointer}
+    .btn{background:linear-gradient(135deg,var(--grad1),var(--grad2));color:#fff;border:none;padding:12px 20px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:.3s;margin:10px 5px}
     .btn:hover{transform:translateY(-2px);box-shadow:0 10px 25px rgba(102,126,234,.4)}
-    .results-section{background:#fff;padding:25px;border-radius:15px;box-shadow:0 10px 25px rgba(0,0,0,.08);border:1px solid rgba(102,126,234,.2)}
-    .supplier-card{background:linear-gradient(135deg,#f8fafc 0%,#e2e8f0 100%);border-radius:12px;padding:20px;margin:15px 0;border-left:4px solid var(--grad1);transition:.3s}
+    .results-section{background:#fff;padding:20px;border-radius:15px;box-shadow:0 10px 25px rgba(0,0,0,.08);border:1px solid rgba(102,126,234,.2)}
+    .supplier-card{background:linear-gradient(135deg,#f8fafc 0%,#e2e8f0 100%);border-radius:12px;padding:16px;margin:12px 0;border-left:4px solid var(--grad1);transition:.3s}
     .supplier-card:hover{transform:translateX(5px);box-shadow:0 10px 25px rgba(0,0,0,.1)}
-    .supplier-name{font-size:1.3em;font-weight:700;color:var(--ink);margin-bottom:8px}
+    .supplier-name{font-size:1.15em;font-weight:700;color:var(--ink);margin-bottom:6px}
     .supplier-details{color:var(--muted);font-size:.95em}
     .distance{font-weight:700;color:var(--grad1)}
     .no-results{text-align:center;color:#718096;font-style:italic;padding:40px}
     .loading{text-align:center;padding:20px;color:var(--grad1);animation:pulse 2s infinite}
+    .debug{margin-top:16px;font-size:.9em;color:#4a5568;background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px}
+    .err{color:#b91c1c}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
   </style>
 </head>
@@ -40,13 +42,14 @@
       <h3>📍 Customer Location & Requirements</h3>
       <div class="postcode-input">
         <label for="postcode"><strong>Customer Postcode:</strong></label>
-        <input type="text" id="postcode" placeholder="e.g., NG6 8WA">
+        <input type="text" id="postcode" placeholder="e.g., OL4 2QS">
         <button class="btn" onclick="findSuppliers()">🔍 Find Suppliers</button>
         <button class="btn" onclick="clearAll()">🗑️ Clear All</button>
       </div>
 
       <h4>Services Required:</h4>
       <div class="services-grid" id="servicesGrid"></div>
+      <div id="debug" class="debug" hidden></div>
     </div>
 
     <div class="results-section">
@@ -58,13 +61,50 @@
   </div>
 
   <script>
+    // ---------- Load ONLY from suppliers.json ----------
     let suppliers = [];
     const servicesSet = new Set();
 
+    // Tidy postcode: trims, removes NBSP and extra whitespace, inserts space before last 3 chars
+    function normalisePC(pc) {
+      if (!pc) return '';
+      const cleaned = pc.replace(/\u00A0/g, ' ')  // NBSP -> space
+                        .replace(/\s+/g, ' ')     // collapse spaces
+                        .trim()
+                        .toUpperCase();
+      // handle "ONLINE" or blank -> return empty string
+      if (!cleaned || cleaned === 'ONLINE' || cleaned === 'EMAIL' || cleaned === 'ONLINE/EMAIL' || cleaned === 'ONLINE/EMAIL') return '';
+      const t = cleaned.replace(/\s+/g, '');
+      if (t.length < 5) return cleaned;
+      return t.slice(0, t.length - 3) + ' ' + t.slice(-3);
+    }
+
     async function loadSuppliers() {
-      const res = await fetch('suppliers.json');
-      suppliers = await res.json();
-      suppliers.forEach(s => s.services.forEach(sv => servicesSet.add(sv)));
+      const dbg = document.getElementById('debug');
+      try {
+        const res = await fetch('suppliers.json', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status} fetching suppliers.json`);
+        const raw = await res.json();
+
+        // map + clean
+        suppliers = raw.map(r => {
+          const pc = normalisePC(r.postcode);
+          const services = Array.isArray(r.services) ? r.services.map(s => String(s).trim()) : [];
+          return { name: r.name, postcode: pc, services };
+        }).filter(s => s.name); // keep named suppliers even if postcode missing
+
+        // populate services list
+        suppliers.forEach(s => s.services.forEach(sv => servicesSet.add(sv)));
+
+        dbg.hidden = false;
+        dbg.innerHTML = `<strong>Dataset loaded:</strong> ${suppliers.length} suppliers, ${servicesSet.size} services.`;
+      } catch (e) {
+        const msg = `❌ Failed to load suppliers.json — ${e.message}. 
+        Make sure suppliers.json is in the same folder as index.html and GitHub Pages has finished building.`;
+        document.getElementById('debug').hidden = false;
+        document.getElementById('debug').innerHTML = `<span class="err">${msg}</span>`;
+        throw e; // hard stop so we don't accidentally use any demo data
+      }
     }
 
     function initializeServices() {
@@ -93,18 +133,13 @@
                   .map(cb => cb.id.replace('service-',''));
     }
 
-    // ----- Postcode + Distance helpers -----
+    // ---------- Geocoding + distance ----------
     const pcCache = new Map(JSON.parse(localStorage.getItem("pcCache") || "[]"));
     const saveCache = () => localStorage.setItem("pcCache", JSON.stringify([...pcCache]));
 
-    function normalisePC(pc) {
-      const t = pc.trim().toUpperCase().replace(/\s+/g, '');
-      if (t.length < 5) return pc.trim().toUpperCase();
-      return t.slice(0, t.length - 3) + ' ' + t.slice(-3);
-    }
-
     async function geocode(postcode) {
       const pc = normalisePC(postcode);
+      if (!pc) throw new Error("Blank/online postcode");
       if (pcCache.has(pc)) return pcCache.get(pc);
       const res = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(pc)}`);
       const data = await res.json();
@@ -136,39 +171,38 @@
       catch { return haversineKm(A, B); }
     }
 
-    // ----- Main -----
+    // ---------- Main ----------
     async function findSuppliers() {
-      const customerPostcode = document.getElementById('postcode').value.trim();
+      const rawPC = document.getElementById('postcode').value.trim();
+      const customerPostcode = normalisePC(rawPC);
       const selectedServices = getSelectedServices();
       const resultsDiv = document.getElementById('results');
+      const dbg = document.getElementById('debug');
 
-      if (!customerPostcode) { resultsDiv.innerHTML = '<div class="no-results">Please enter a customer postcode</div>'; return; }
+      if (!rawPC) { resultsDiv.innerHTML = '<div class="no-results">Please enter a customer postcode</div>'; return; }
       if (selectedServices.length === 0) { resultsDiv.innerHTML = '<div class="no-results">Please select at least one service</div>'; return; }
 
       resultsDiv.innerHTML = '<div class="loading">🔍 Calculating driving distances…</div>';
 
-      // Match ANY selected service
-      const matching = suppliers.filter(s =>
-        selectedServices.some(sv => s.services.includes(sv))
-      );
+      // ANY service match
+      const matching = suppliers.filter(s => selectedServices.some(sv => s.services.includes(sv)));
 
       if (matching.length === 0) {
-        resultsDiv.innerHTML = '<div class="no-results">No suppliers found for selected services</div>';
+        resultsDiv.innerHTML = `<div class="no-results">No suppliers found for: ${selectedServices.join(', ')}</div>`;
         return;
       }
 
-      // Calculate distances but keep supplier even if it fails
+      // Compute distances; keep suppliers even if distance fails
       const enriched = await Promise.all(matching.map(async s => {
         try {
           const km = await bestDistanceKm(customerPostcode, s.postcode);
-          return { ...s, distance: km };
+          return { ...s, distance: km, _err: null };
         } catch (err) {
-          console.warn(`Distance lookup failed for ${s.name} (${s.postcode}):`, err.message);
-          return { ...s, distance: null };
+          return { ...s, distance: null, _err: err?.message || 'distance failed' };
         }
       }));
 
-      // Sort: finite distances first, then N/A, then top 3
+      // Sort: finite first, then N/A; take top 3
       const sorted = enriched.sort((a, b) => {
         if (a.distance === null && b.distance !== null) return 1;
         if (a.distance !== null && b.distance === null) return -1;
@@ -176,14 +210,24 @@
         return a.distance - b.distance;
       }).slice(0, 3);
 
-      let html = `<p><strong>Showing ${sorted.length} supplier(s) for: ${selectedServices.join(', ')}</strong></p>`;
+      // Debug info to prove dataset + matches
+      dbg.hidden = false;
+      dbg.innerHTML = `
+        <strong>Debug:</strong>
+        Postcode used: <code>${customerPostcode}</code> • Selected services: ${selectedServices.join(', ')}<br>
+        Matched suppliers: ${matching.length} • Showing: ${sorted.length}
+      `;
+
+      // Render
+      let html = `<p><strong>Showing up to 3 closest suppliers for: ${selectedServices.join(', ')}</strong><br>
+                  Normalised postcode: <code>${customerPostcode}</code></p>`;
       sorted.forEach((s, i) => {
-        const distText = (s.distance !== null) ? `${s.distance.toFixed(1)} km` : 'N/A';
+        const distText = (s.distance !== null) ? `${s.distance.toFixed(1)} km` : `N/A${s._err ? ` <em>(distance lookup issue: ${s._err})</em>` : ''}`;
         html += `
           <div class="supplier-card">
             <div class="supplier-name">${i + 1}. ${s.name}</div>
             <div class="supplier-details">
-              📍 <strong>Postcode:</strong> ${s.postcode} |
+              📍 <strong>Postcode:</strong> ${s.postcode || '—'} |
               📏 <strong>Driving distance:</strong> <span class="distance">${distText}</span><br>
               🛠️ <strong>Services:</strong> ${s.services.join(', ')}
             </div>
@@ -204,7 +248,7 @@
     }
 
     window.onload = async () => {
-      await loadSuppliers();
+      await loadSuppliers();   // throws if JSON missing — prevents accidental fallback
       initializeServices();
     };
   </script>
