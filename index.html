@@ -62,11 +62,11 @@
         <label for="loginPass">Password</label>
         <input id="loginPass" type="password" autocomplete="current-password" />
       </div>
-      <div class="actions" style="justify-content:space-between;margin-top:8px">
+      <div class="actions" style="justify-content:flex-end;margin-top:8px">
         <button class="btn" id="btnEmailLogin">Sign in</button>
       </div>
       <div id="loginErr" class="error"></div>
-      <div class="muted" style="margin-top:6px">Firebase Authentication (client-side). Authorized domain must include your GitHub Pages URL.</div>
+      <div class="muted" style="margin-top:6px">Firebase Authentication. Make sure your GitHub Pages domain is in “Authorized domains”.</div>
     </div>
   </div>
 
@@ -109,22 +109,8 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, setPersistence, browserLocalPersistence,
              onAuthStateChanged, signInWithPopup, GoogleAuthProvider,
-             signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut }
+             signInWithEmailAndPassword, signOut }
       from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-
-    // === 1) PASTE YOUR FIREBASE CONFIG HERE ===
-    const firebaseConfig = {
-      apiKey: "AIzaSyCjUNXtUu0mIBOq6GK5QnwzLhVj18KcQ9E",
-      authDomain: "testauthentication-7b4d5.firebaseapp.com",
-      projectId: "testauthentication-7b4d5",
-      appId: "1:175852328677:web:4e7ea0a66400fa477da60c",
-    };
-    // ==========================================
-
-    // Boot Firebase
-    const appFB = initializeApp(firebaseConfig);
-    const auth = getAuth(appFB);
-    setPersistence(auth, browserLocalPersistence);
 
     const q = s => document.querySelector(s);
     const loginOverlay = q('#loginOverlay');
@@ -132,43 +118,86 @@
     const loginErr = q('#loginErr');
     const whoami = q('#whoami');
 
-    // Auth UI handlers
-    q('#btnGoogle').addEventListener('click', async () => {
-      loginErr.textContent = '';
-      try { await signInWithPopup(auth, new GoogleAuthProvider()); }
-      catch (e) { loginErr.textContent = e.message; }
-    });
-    q('#btnEmailLogin').addEventListener('click', async () => {
-      loginErr.textContent = '';
-      const email = q('#loginEmail').value.trim();
-      const pass = q('#loginPass').value;
-      try { await signInWithEmailAndPassword(auth, email, pass); }
-      catch (e) { loginErr.textContent = e.message; }
-    });
-      const email = q('#loginEmail').value.trim();
-      const pass = q('#loginPass').value;
-      try { await createUserWithEmailAndPassword(auth, email, pass); }
-      catch (e) { loginErr.textContent = e.message; }
-    });
-    q('#btnSignOut').addEventListener('click', async () => { await signOut(auth); });
+    // ====== PASTE YOUR FIREBASE CONFIG HERE (do NOT delete the variable) ======
+    const firebaseConfig = {
+      apiKey: "AIzaSyCjUNXtUu0mIBOq6GK5QnwzLhVj18KcQ9E",
+      authDomain: "testauthentication-7b4d5.firebaseapp.com"",
+      projectId: "testauthentication-7b4d5",
+      appId: "1:175852328677:web:4e7ea0a66400fa477da60c",
+      // storageBucket, messagingSenderId are optional for Auth-only
+    };
+    // ========================================================================
 
-    // Gate the app on auth state
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        whoami.textContent = user.email || user.displayName || '(signed in)';
-        loginOverlay.style.display = 'none';
-        appRoot.style.display = 'block';
-        startApp(); // load data + UI (idempotent)
-      } else {
-        appRoot.style.display = 'none';
-        loginOverlay.style.display = 'flex';
-        loginErr.textContent = '';
+    // Optional allow-list (uncomment to enforce)
+    // const ALLOWED_EMAILS = ["you@yourcompany.com"];
+    // const ALLOWED_DOMAINS = ["yourcompany.com"];
+    // function emailAllowed(email) {
+    //   if (!email) return false;
+    //   const domain = email.split("@")[1]?.toLowerCase();
+    //   return ALLOWED_EMAILS.includes(email.toLowerCase()) ||
+    //          ALLOWED_DOMAINS.includes(domain);
+    // }
+
+    let auth;
+    try {
+      // Guard: if config was left blank, throw a friendly error
+      if (!firebaseConfig || !firebaseConfig.apiKey) {
+        throw new Error("Firebase config missing. Paste your firebaseConfig in the HTML.");
       }
-    });
+
+      const appFB = initializeApp(firebaseConfig);
+      auth = getAuth(appFB);
+      setPersistence(auth, browserLocalPersistence);
+
+      // Sign-in handlers
+      q('#btnGoogle').addEventListener('click', async () => {
+        loginErr.textContent = '';
+        try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+        catch (e) { loginErr.textContent = e.message; }
+      });
+      q('#btnEmailLogin').addEventListener('click', async () => {
+        loginErr.textContent = '';
+        const email = q('#loginEmail').value.trim();
+        const pass = q('#loginPass').value;
+        try { await signInWithEmailAndPassword(auth, email, pass); }
+        catch (e) { loginErr.textContent = e.message; }
+      });
+      q('#btnSignOut').addEventListener('click', async () => { await signOut(auth); });
+
+      // Auth gate
+      onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          // if (ALLOWED_EMAILS.length || ALLOWED_DOMAINS.length) {
+          //   if (!emailAllowed(user.email)) {
+          //     await signOut(auth);
+          //     loginErr.textContent = "Your account isn’t approved for access.";
+          //     loginOverlay.style.display = 'flex';
+          //     appRoot.style.display = 'none';
+          //     return;
+          //   }
+          // }
+          whoami.textContent = user.email || user.displayName || '(signed in)';
+          loginOverlay.style.display = 'none';
+          appRoot.style.display = 'block';
+          startApp(); // defined in the app script
+        } else {
+          appRoot.style.display = 'none';
+          loginOverlay.style.display = 'flex';
+          loginErr.textContent = '';
+        }
+      });
+    } catch (e) {
+      // If Firebase init fails, show overlay with an error message
+      console.error(e);
+      appRoot.style.display = 'none';
+      loginOverlay.style.display = 'flex';
+      loginErr.textContent = e.message || String(e);
+    }
   </script>
 
   <!-- App logic -->
   <script>
+    // Show any runtime JS errors in-page
     window.addEventListener('error', (e) => {
       const dbg = document.getElementById('debug');
       if (!dbg) return;
@@ -210,9 +239,7 @@
       }).filter(s => s.name);
 
       suppliers.forEach(s => s.services.forEach(sv => servicesSet.add(sv)));
-
       dbg.textContent = `Dataset loaded: ${suppliers.length} suppliers, ${servicesSet.size} services.`;
-      console.log(dbg.textContent);
     }
 
     function initializeServices() {
@@ -256,7 +283,15 @@
       const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
       const la1 = toRad(a.lat), la2 = toRad(b.lat);
       const h = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
-      return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+      return 2 * R * Math.atan2(Math.sqrt(Math.sqrt ? Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2 : 0), Math.sqrt(1 - (Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2)));
+    }
+    // small fix: simpler haversine (avoid inline sqrt bug if copied)
+    function haversineKm(a,b){
+      const R=6371,toRad=d=>d*Math.PI/180;
+      const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
+      const la1=toRad(a.lat), la2=toRad(b.lat);
+      const h=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
+      return 2*R*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));
     }
 
     async function osrmDrivingKm(a, b) {
