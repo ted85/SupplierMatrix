@@ -11,15 +11,16 @@
     .container{max-width:1200px;margin:0 auto;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-radius:20px;padding:30px;box-shadow:0 20px 40px rgba(0,0,0,.1)}
     h1{text-align:center;color:var(--ink);margin-bottom:30px;font-size:2.2em;background:linear-gradient(45deg,var(--grad1),var(--grad2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
     .input-section{background:#fff;padding:25px;border-radius:15px;margin-bottom:25px;box-shadow:0 10px 25px rgba(0,0,0,.08);border:1px solid rgba(102,126,234,.2)}
-    .postcode-input{display:flex;gap:15px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
-    input[type=text]{padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:16px;transition:.3s;min-width:150px}
-    input[type=text]:focus{outline:none;border-color:var(--grad1);box-shadow:0 0 0 3px rgba(102,126,234,.1)}
-    .services-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-top:10px}
+    .postcode-input{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+    input[type=text], input[type=password], input[type=email]{padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:16px;transition:.3s;min-width:160px}
+    input:focus{outline:none;border-color:var(--grad1);box-shadow:0 0 0 3px rgba(102,126,234,.1)}
+    .services-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:10px}
     .service-item{display:flex;align-items:center;padding:10px;background:#f8fafc;border-radius:8px;transition:.3s;cursor:pointer}
     .service-item:hover{background:#e6fffa;transform:translateY(-2px)}
     .service-item.selected{background:linear-gradient(135deg,var(--grad1),var(--grad2));color:#fff}
     input[type=checkbox]{margin-right:10px;transform:scale(1.1);cursor:pointer}
-    .btn{background:linear-gradient(135deg,var(--grad1),var(--grad2));color:#fff;border:none;padding:12px 20px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:.3s;margin:10px 5px}
+    .btn{background:linear-gradient(135deg,var(--grad1),var(--grad2));color:#fff;border:none;padding:12px 18px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:.3s}
+    .btn.alt{background:#e2e8f0;color:#1f2937}
     .btn:hover{transform:translateY(-2px);box-shadow:0 10px 25px rgba(102,126,234,.4)}
     .results-section{background:#fff;padding:20px;border-radius:15px;box-shadow:0 10px 25px rgba(0,0,0,.08);border:1px solid rgba(102,126,234,.2)}
     .supplier-card{background:linear-gradient(135deg,#f8fafc 0%,#e2e8f0 100%);border-radius:12px;padding:16px;margin:12px 0;border-left:4px solid var(--grad1);transition:.3s}
@@ -31,20 +32,64 @@
     .loading{text-align:center;padding:20px;color:var(--grad1);animation:pulse 2s infinite}
     .debug{margin-top:16px;font-size:.9em;color:#1f2937;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:10px}
     .err{color:#b91c1c}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .muted{color:#6b7280}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    /* Login overlay */
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;justify-content:center;align-items:center;z-index:9999}
+    .login-card{width:380px;background:#fff;border-radius:14px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+    .login-card h2{margin:0 0 10px 0}
+    .row{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+    .row label{font-weight:600;color:#334155}
+    .error{color:#b91c1c;font-size:.9em;min-height:1.2em}
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🎯 Supplier Selection System</h1>
+  <!-- Auth overlay -->
+  <div id="loginOverlay" class="overlay" style="display:none">
+    <div class="login-card">
+      <h2>Sign in</h2>
+      <div class="row">
+        <button class="btn" id="btnGoogle">Continue with Google</button>
+      </div>
+      <div class="row"><div class="muted" style="text-align:center">— or —</div></div>
+      <div class="row">
+        <label for="loginEmail">Email</label>
+        <input id="loginEmail" type="email" autocomplete="username" />
+      </div>
+      <div class="row">
+        <label for="loginPass">Password</label>
+        <input id="loginPass" type="password" autocomplete="current-password" />
+      </div>
+      <div class="actions" style="justify-content:space-between;margin-top:8px">
+        <button class="btn" id="btnEmailLogin">Sign in</button>
+        <button class="btn alt" id="btnEmailRegister" title="Create account">Register</button>
+      </div>
+      <div id="loginErr" class="error"></div>
+      <div class="muted" style="margin-top:6px">Firebase Authentication (client-side). Authorized domain must include your GitHub Pages URL.</div>
+    </div>
+  </div>
+
+  <div class="container" id="app" style="display:none">
+    <div class="topbar">
+      <h1>🎯 Supplier Selection System</h1>
+      <div>
+        <span id="whoami" class="muted"></span>
+        <button class="btn alt" id="btnSignOut" style="margin-left:8px">Sign out</button>
+      </div>
+    </div>
 
     <div class="input-section">
       <h3>📍 Customer Location & Requirements</h3>
       <div class="postcode-input">
         <label for="postcode"><strong>Customer Postcode:</strong></label>
         <input type="text" id="postcode" placeholder="e.g., OL4 2QS">
-        <button class="btn" onclick="findSuppliers()">🔍 Find Suppliers</button>
-        <button class="btn" onclick="clearAll()">🗑️ Clear All</button>
+        <div class="actions">
+          <button class="btn" onclick="findSuppliers(false)">🔍 Find Top 3</button>
+          <button class="btn alt" onclick="findSuppliers(true)">🧾 Show All Matches</button>
+          <button class="btn alt" onclick="clearAll()">🗑️ Clear</button>
+        </div>
       </div>
 
       <h4>Services Required:</h4>
@@ -53,67 +98,124 @@
     </div>
 
     <div class="results-section">
-      <h3>📋 Matching Suppliers (Top 3 by Distance)</h3>
+      <h3 id="resultsTitle">📋 Matching Suppliers</h3>
       <div id="results">
-        <div class="no-results">Select services and click "Find Suppliers" to see results</div>
+        <div class="no-results">Select services and click one of the buttons above</div>
       </div>
     </div>
   </div>
 
+  <!-- Firebase v10 modular SDKs -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, setPersistence, browserLocalPersistence,
+             onAuthStateChanged, signInWithPopup, GoogleAuthProvider,
+             signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut }
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    // === 1) PASTE YOUR FIREBASE CONFIG HERE ===
+    const firebaseConfig = {
+      apiKey: "AIzaSyCjUNXtUu0mIBOq6GK5QnwzLhVj18KcQ9E",
+      authDomain: "testauthentication-7b4d5.firebaseapp.com",
+      projectId: "testauthentication-7b4d5",
+      appId: "1:175852328677:web:4e7ea0a66400fa477da60c",
+    };
+    // ==========================================
+
+    // Boot Firebase
+    const appFB = initializeApp(firebaseConfig);
+    const auth = getAuth(appFB);
+    setPersistence(auth, browserLocalPersistence);
+
+    const q = s => document.querySelector(s);
+    const loginOverlay = q('#loginOverlay');
+    const appRoot = q('#app');
+    const loginErr = q('#loginErr');
+    const whoami = q('#whoami');
+
+    // Auth UI handlers
+    q('#btnGoogle').addEventListener('click', async () => {
+      loginErr.textContent = '';
+      try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+      catch (e) { loginErr.textContent = e.message; }
+    });
+    q('#btnEmailLogin').addEventListener('click', async () => {
+      loginErr.textContent = '';
+      const email = q('#loginEmail').value.trim();
+      const pass = q('#loginPass').value;
+      try { await signInWithEmailAndPassword(auth, email, pass); }
+      catch (e) { loginErr.textContent = e.message; }
+    });
+    q('#btnEmailRegister').addEventListener('click', async () => {
+      loginErr.textContent = '';
+      const email = q('#loginEmail').value.trim();
+      const pass = q('#loginPass').value;
+      try { await createUserWithEmailAndPassword(auth, email, pass); }
+      catch (e) { loginErr.textContent = e.message; }
+    });
+    q('#btnSignOut').addEventListener('click', async () => { await signOut(auth); });
+
+    // Gate the app on auth state
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        whoami.textContent = user.email || user.displayName || '(signed in)';
+        loginOverlay.style.display = 'none';
+        appRoot.style.display = 'block';
+        startApp(); // load data + UI (idempotent)
+      } else {
+        appRoot.style.display = 'none';
+        loginOverlay.style.display = 'flex';
+        loginErr.textContent = '';
+      }
+    });
+  </script>
+
+  <!-- App logic -->
   <script>
-    // --- Error banner so nothing fails silently ---
     window.addEventListener('error', (e) => {
       const dbg = document.getElementById('debug');
+      if (!dbg) return;
       dbg.hidden = false;
       dbg.innerHTML = `<span class="err">JS error: ${e.message}</span>`;
     });
 
     let suppliers = [];
     const servicesSet = new Set();
+    let lastComputed = [];
 
-    // Build a robust URL for suppliers.json (handles subpaths)
     function suppliersUrl() {
       const u = new URL('suppliers.json', window.location.href);
-      // cache-bust to avoid GH Pages caching
       u.searchParams.set('v', Date.now().toString());
       return u.toString();
     }
 
-    // Postcode normaliser
     function normalisePC(pc) {
       if (!pc) return '';
-      const cleaned = String(pc).replace(/\u00A0/g, ' ')
-        .replace(/\s+/g, ' ').trim().toUpperCase();
+      const cleaned = String(pc).replace(/\u00A0/g,' ').replace(/\s+/g,' ').trim().toUpperCase();
       if (!cleaned || /^ONLINE\b|^EMAIL\b/i.test(cleaned)) return '';
-      const t = cleaned.replace(/\s+/g, '');
+      const t = cleaned.replace(/\s+/g,'');
       if (t.length < 5) return cleaned;
-      return t.slice(0, t.length - 3) + ' ' + t.slice(-3);
+      return t.slice(0, t.length-3) + ' ' + t.slice(-3);
     }
 
     async function loadSuppliers() {
       const dbg = document.getElementById('debug');
-      dbg.hidden = false;
-      dbg.textContent = 'Fetching suppliers.json…';
-
-      const url = suppliersUrl();
-      console.log('Fetching', url);
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status} fetching suppliers.json (${url})`);
+      dbg.hidden = false; dbg.textContent = 'Fetching suppliers.json…';
+      const res = await fetch(suppliersUrl(), { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status} fetching suppliers.json`);
       const raw = await res.json();
 
-      // Accept both "postcode" and "Postcode"
       suppliers = raw.map(r => {
-        const pc = normalisePC(r.postcode ?? r.Postcode ?? r.POSTCODE ?? '');
         const name = r.name ?? r.Supplier ?? r.supplier ?? '';
-        const services = Array.isArray(r.services) ? r.services.map(s => String(s).trim()) : [];
-        return { name, postcode: pc, services };
+        const pc = normalisePC(r.postcode ?? r.Postcode ?? r.POSTCODE ?? '');
+        const svcs = Array.isArray(r.services) ? r.services.map(s => String(s).trim()) : [];
+        return { name, postcode: pc, services: svcs };
       }).filter(s => s.name);
 
       suppliers.forEach(s => s.services.forEach(sv => servicesSet.add(sv)));
 
-      const msg = `Dataset loaded: ${suppliers.length} suppliers, ${servicesSet.size} services.`;
-      console.log(msg);
-      dbg.textContent = msg;
+      dbg.textContent = `Dataset loaded: ${suppliers.length} suppliers, ${servicesSet.size} services.`;
+      console.log(dbg.textContent);
     }
 
     function initializeServices() {
@@ -127,10 +229,7 @@
           cb.checked = !cb.checked;
           div.classList.toggle('selected', cb.checked);
         };
-        div.innerHTML = `
-          <input type="checkbox" id="service-${service}">
-          <label for="service-${service}">${service}</label>
-        `;
+        div.innerHTML = `<input type="checkbox" id="service-${service}"><label for="service-${service}">${service}</label>`;
         grid.appendChild(div);
       });
     }
@@ -140,7 +239,6 @@
         .map(cb => cb.id.replace('service-',''));
     }
 
-    // --- Geocoding + distance ---
     const pcCache = new Map(JSON.parse(localStorage.getItem("pcCache") || "[]"));
     const saveCache = () => localStorage.setItem("pcCache", JSON.stringify([...pcCache]));
 
@@ -178,54 +276,18 @@
       catch { return haversineKm(A, B); }
     }
 
-    // --- Main flow ---
-    async function findSuppliers() {
-      const rawPC = document.getElementById('postcode').value.trim();
-      const customerPostcode = normalisePC(rawPC);
-      const selectedServices = getSelectedServices();
+    function renderResults(items, title) {
       const resultsDiv = document.getElementById('results');
-      const dbg = document.getElementById('debug');
-
-      if (!rawPC) { resultsDiv.innerHTML = '<div class="no-results">Please enter a customer postcode</div>'; return; }
-      if (selectedServices.length === 0) { resultsDiv.innerHTML = '<div class="no-results">Please select at least one service</div>'; return; }
-
-      resultsDiv.innerHTML = '<div class="loading">🔍 Calculating driving distances…</div>';
-
-      const matching = suppliers.filter(s => selectedServices.some(sv => s.services.includes(sv)));
-
-      if (matching.length === 0) {
-        resultsDiv.innerHTML = `<div class="no-results">No suppliers found for: ${selectedServices.join(', ')}</div>`;
+      document.getElementById('resultsTitle').textContent = title;
+      if (!items.length) {
+        resultsDiv.innerHTML = '<div class="no-results">No matching suppliers</div>';
         return;
       }
-
-      const enriched = await Promise.all(matching.map(async s => {
-        try {
-          const km = await bestDistanceKm(customerPostcode, s.postcode);
-          return { ...s, distance: km, _err: null };
-        } catch (err) {
-          return { ...s, distance: null, _err: err?.message || 'distance failed' };
-        }
-      }));
-
-      const sorted = enriched.sort((a, b) => {
-        if (a.distance === null && b.distance !== null) return 1;
-        if (a.distance !== null && b.distance === null) return -1;
-        if (a.distance === null && b.distance === null) return 0;
-        return a.distance - b.distance;
-      }).slice(0, 3);
-
-      dbg.hidden = false;
-      dbg.innerHTML = `
-        <strong>Debug:</strong>
-        Postcode used: <code>${customerPostcode}</code> • Selected services: ${selectedServices.join(', ')}<br>
-        Matched suppliers: ${matching.length} • Showing: ${sorted.length}
-      `;
-
-      let html = `<p><strong>Showing up to 3 closest suppliers for: ${selectedServices.join(', ')}</strong><br>
-                  Normalised postcode: <code>${customerPostcode}</code></p>`;
-      sorted.forEach((s, i) => {
-        const distText = (s.distance !== null) ? `${s.distance.toFixed(1)} km` :
-          `N/A${s._err ? ` <em>(distance lookup issue: ${s._err})</em>` : ''}`;
+      let html = '';
+      items.forEach((s, i) => {
+        const distText = (s.distance !== null && s.distance !== undefined)
+          ? `${s.distance.toFixed(1)} km`
+          : `N/A${s._err ? ` <em>(distance lookup issue: ${s._err})</em>` : ''}`;
         html += `
           <div class="supplier-card">
             <div class="supplier-name">${i + 1}. ${s.name}</div>
@@ -234,33 +296,59 @@
               📏 <strong>Driving distance:</strong> <span class="distance">${distText}</span><br>
               🛠️ <strong>Services:</strong> ${s.services.join(', ')}
             </div>
-          </div>
-        `;
+          </div>`;
+      });
+      resultsDiv.innerHTML = html;
+    }
+
+    async function findSuppliers(showAll) {
+      const rawPC = document.getElementById('postcode').value.trim();
+      const customerPostcode = normalisePC(rawPC);
+      const selectedServices = getSelectedServices();
+      const dbg = document.getElementById('debug');
+      const resultsDiv = document.getElementById('results');
+
+      if (!rawPC) { resultsDiv.innerHTML = '<div class="no-results">Please enter a customer postcode</div>'; return; }
+      if (selectedServices.length === 0) { resultsDiv.innerHTML = '<div class="no-results">Please select at least one service</div>'; return; }
+
+      resultsDiv.innerHTML = '<div class="loading">🔍 Calculating driving distances…</div>';
+
+      const matching = suppliers.filter(s => selectedServices.some(sv => s.services.includes(sv)));
+      if (matching.length === 0) { resultsDiv.innerHTML = `<div class="no-results">No suppliers found for: ${selectedServices.join(', ')}</div>`; return; }
+
+      const enriched = await Promise.all(matching.map(async s => {
+        try { const km = await bestDistanceKm(customerPostcode, s.postcode); return { ...s, distance: km, _err: null }; }
+        catch (err) { return { ...s, distance: null, _err: err?.message || 'distance failed' }; }
+      }));
+
+      lastComputed = enriched.sort((a, b) => {
+        if (a.distance === null && b.distance !== null) return 1;
+        if (a.distance !== null && b.distance === null) return -1;
+        if (a.distance === null && b.distance === null) return 0;
+        return a.distance - b.distance;
       });
 
-      resultsDiv.innerHTML = html;
+      dbg.hidden = false;
+      dbg.innerHTML = `<strong>Debug:</strong> Postcode: <code>${customerPostcode}</code> • Services: ${selectedServices.join(', ')} • Matches: ${lastComputed.length}`;
+
+      const list = showAll ? lastComputed : lastComputed.slice(0, 3);
+      renderResults(list, showAll ? '📋 All Matching Suppliers' : '📋 Top 3 by Distance');
     }
 
     function clearAll() {
       document.getElementById('postcode').value = '';
-      document.querySelectorAll('#servicesGrid input[type="checkbox"]').forEach(cb => {
-        cb.checked = false;
-        cb.parentElement.classList.remove('selected');
-      });
-      document.getElementById('results').innerHTML = '<div class="no-results">Select services and click "Find Suppliers" to see results</div>';
+      document.querySelectorAll('#servicesGrid input[type="checkbox"]').forEach(cb => { cb.checked = false; cb.parentElement.classList.remove('selected'); });
+      document.getElementById('results').innerHTML = '<div class="no-results">Select services and click one of the buttons above</div>';
     }
 
-    window.onload = async () => {
-      try {
-        await loadSuppliers();      // load data first
-        initializeServices();       // then UI
-      } catch (e) {
-        const dbg = document.getElementById('debug');
-        dbg.hidden = false;
-        dbg.innerHTML = `<span class="err">Startup failed: ${e.message}</span>`;
-        console.error(e);
-      }
-    };
+    // Start after auth
+    let appStarted = false;
+    async function startApp() {
+      if (appStarted) return; // idempotent
+      appStarted = true;
+      await loadSuppliers();
+      initializeServices();
+    }
   </script>
 </body>
 </html>
