@@ -36,7 +36,7 @@
     .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
     .muted{color:#6b7280}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-    /* Login overlay */
+    /* Login overlay – visible by default so you never see a blank page */
     .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;justify-content:center;align-items:center;z-index:9999}
     .login-card{width:380px;background:#fff;border-radius:14px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
     .login-card h2{margin:0 0 10px 0}
@@ -46,8 +46,8 @@
   </style>
 </head>
 <body>
-  <!-- Auth overlay -->
-  <div id="loginOverlay" class="overlay" style="display:none">
+  <!-- Auth overlay (shown by default; hidden after auth init) -->
+  <div id="loginOverlay" class="overlay">
     <div class="login-card">
       <h2>Sign in</h2>
       <div class="row">
@@ -66,7 +66,7 @@
         <button class="btn" id="btnEmailLogin">Sign in</button>
       </div>
       <div id="loginErr" class="error"></div>
-      <div class="muted" style="margin-top:6px">Firebase Authentication. Make sure your GitHub Pages domain is in “Authorized domains”.</div>
+      <div class="muted" style="margin-top:6px">Make sure your GitHub Pages domain is in Firebase → Authentication → Authorized domains.</div>
     </div>
   </div>
 
@@ -104,6 +104,18 @@
     </div>
   </div>
 
+  <!-- Fallback: if the module never boots, show a helpful message -->
+  <script>
+    window.__appBooted = false;
+    setTimeout(() => {
+      if (!window.__appBooted) {
+        const err = document.getElementById('loginErr');
+        if (err) err.textContent = 'App failed to start. Check Console for errors (likely a typo in firebaseConfig).';
+        document.getElementById('loginOverlay').style.display = 'flex';
+      }
+    }, 1500);
+  </script>
+
   <!-- Firebase v10 modular SDKs -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -118,86 +130,56 @@
     const loginErr = q('#loginErr');
     const whoami = q('#whoami');
 
-    // ====== PASTE YOUR FIREBASE CONFIG HERE (do NOT delete the variable) ======
+    // ====== PASTE YOUR FIREBASE CONFIG HERE (exactly as given) ======
     const firebaseConfig = {
       apiKey: "AIzaSyCjUNXtUu0mIBOq6GK5QnwzLhVj18KcQ9E",
       authDomain: "testauthentication-7b4d5.firebaseapp.com",
       projectId: "testauthentication-7b4d5",
-      appId: "1:175852328677:web:4e7ea0a66400fa477da60c",
-      // storageBucket, messagingSenderId are optional for Auth-only
+      storageBucket: "testauthentication-7b4d5.firebasestorage.app",
+      messagingSenderId: "175852328677",
+      appId: "1:175852328677:web:4e7ea0a66400fa477da60c"
     };
-    // ========================================================================
+    // =================================================================
 
-    // Optional allow-list (uncomment to enforce)
-    // const ALLOWED_EMAILS = ["you@yourcompany.com"];
-    // const ALLOWED_DOMAINS = ["yourcompany.com"];
-    // function emailAllowed(email) {
-    //   if (!email) return false;
-    //   const domain = email.split("@")[1]?.toLowerCase();
-    //   return ALLOWED_EMAILS.includes(email.toLowerCase()) ||
-    //          ALLOWED_DOMAINS.includes(domain);
-    // }
+    // Boot
+    const appFB = initializeApp(firebaseConfig);
+    const auth = getAuth(appFB);
+    await setPersistence(auth, browserLocalPersistence);
 
-    let auth;
-    try {
-      // Guard: if config was left blank, throw a friendly error
-      if (!firebaseConfig || !firebaseConfig.apiKey) {
-        throw new Error("Firebase config missing. Paste your firebaseConfig in the HTML.");
+    // Handlers
+    q('#btnGoogle').addEventListener('click', async () => {
+      loginErr.textContent = '';
+      try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+      catch (e) { loginErr.textContent = e.message; }
+    });
+    q('#btnEmailLogin').addEventListener('click', async () => {
+      loginErr.textContent = '';
+      const email = q('#loginEmail').value.trim();
+      const pass = q('#loginPass').value;
+      try { await signInWithEmailAndPassword(auth, email, pass); }
+      catch (e) { loginErr.textContent = e.message; }
+    });
+    q('#btnSignOut').addEventListener('click', async () => { await signOut(auth); });
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        whoami.textContent = user.email || user.displayName || '(signed in)';
+        loginOverlay.style.display = 'none';
+        appRoot.style.display = 'block';
+        startApp();
+      } else {
+        appRoot.style.display = 'none';
+        loginOverlay.style.display = 'flex';
+        loginErr.textContent = '';
       }
+    });
 
-      const appFB = initializeApp(firebaseConfig);
-      auth = getAuth(appFB);
-      setPersistence(auth, browserLocalPersistence);
-
-      // Sign-in handlers
-      q('#btnGoogle').addEventListener('click', async () => {
-        loginErr.textContent = '';
-        try { await signInWithPopup(auth, new GoogleAuthProvider()); }
-        catch (e) { loginErr.textContent = e.message; }
-      });
-      q('#btnEmailLogin').addEventListener('click', async () => {
-        loginErr.textContent = '';
-        const email = q('#loginEmail').value.trim();
-        const pass = q('#loginPass').value;
-        try { await signInWithEmailAndPassword(auth, email, pass); }
-        catch (e) { loginErr.textContent = e.message; }
-      });
-      q('#btnSignOut').addEventListener('click', async () => { await signOut(auth); });
-
-      // Auth gate
-      onAuthStateChanged(auth, async (user) => {
-        if (user) {
-          // if (ALLOWED_EMAILS.length || ALLOWED_DOMAINS.length) {
-          //   if (!emailAllowed(user.email)) {
-          //     await signOut(auth);
-          //     loginErr.textContent = "Your account isn’t approved for access.";
-          //     loginOverlay.style.display = 'flex';
-          //     appRoot.style.display = 'none';
-          //     return;
-          //   }
-          // }
-          whoami.textContent = user.email || user.displayName || '(signed in)';
-          loginOverlay.style.display = 'none';
-          appRoot.style.display = 'block';
-          startApp(); // defined in the app script
-        } else {
-          appRoot.style.display = 'none';
-          loginOverlay.style.display = 'flex';
-          loginErr.textContent = '';
-        }
-      });
-    } catch (e) {
-      // If Firebase init fails, show overlay with an error message
-      console.error(e);
-      appRoot.style.display = 'none';
-      loginOverlay.style.display = 'flex';
-      loginErr.textContent = e.message || String(e);
-    }
+    // mark boot success so fallback doesn’t fire
+    window.__appBooted = true;
   </script>
 
   <!-- App logic -->
   <script>
-    // Show any runtime JS errors in-page
     window.addEventListener('error', (e) => {
       const dbg = document.getElementById('debug');
       if (!dbg) return;
@@ -263,6 +245,7 @@
         .map(cb => cb.id.replace('service-',''));
     }
 
+    // Geocoding + distance
     const pcCache = new Map(JSON.parse(localStorage.getItem("pcCache") || "[]"));
     const saveCache = () => localStorage.setItem("pcCache", JSON.stringify([...pcCache]));
 
@@ -278,14 +261,6 @@
       return ll;
     }
 
-    function haversineKm(a, b) {
-      const R = 6371, toRad = d => d * Math.PI / 180;
-      const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
-      const la1 = toRad(a.lat), la2 = toRad(b.lat);
-      const h = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
-      return 2 * R * Math.atan2(Math.sqrt(Math.sqrt ? Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2 : 0), Math.sqrt(1 - (Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2)));
-    }
-    // small fix: simpler haversine (avoid inline sqrt bug if copied)
     function haversineKm(a,b){
       const R=6371,toRad=d=>d*Math.PI/180;
       const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
@@ -353,7 +328,7 @@
         catch (err) { return { ...s, distance: null, _err: err?.message || 'distance failed' }; }
       }));
 
-      lastComputed = enriched.sort((a, b) => {
+      const sorted = enriched.sort((a, b) => {
         if (a.distance === null && b.distance !== null) return 1;
         if (a.distance !== null && b.distance === null) return -1;
         if (a.distance === null && b.distance === null) return 0;
@@ -361,22 +336,25 @@
       });
 
       dbg.hidden = false;
-      dbg.innerHTML = `<strong>Debug:</strong> Postcode: <code>${customerPostcode}</code> • Services: ${selectedServices.join(', ')} • Matches: ${lastComputed.length}`;
+      dbg.innerHTML = `<strong>Debug:</strong> Postcode: <code>${customerPostcode}</code> • Services: ${selectedServices.join(', ')} • Matches: ${sorted.length}`;
 
-      const list = showAll ? lastComputed : lastComputed.slice(0, 3);
-      renderResults(list, showAll ? '📋 All Matching Suppliers' : '📋 Top 3 by Distance');
+      renderResults(showAll ? sorted : sorted.slice(0, 3),
+                    showAll ? '📋 All Matching Suppliers' : '📋 Top 3 by Distance');
     }
 
     function clearAll() {
       document.getElementById('postcode').value = '';
-      document.querySelectorAll('#servicesGrid input[type="checkbox"]').forEach(cb => { cb.checked = false; cb.parentElement.classList.remove('selected'); });
-      document.getElementById('results').innerHTML = '<div class="no-results">Select services and click one of the buttons above</div>';
+      document.querySelectorAll('#servicesGrid input[type="checkbox"]').forEach(cb => {
+        cb.checked = false; cb.parentElement.classList.remove('selected');
+      });
+      document.getElementById('results').innerHTML =
+        '<div class="no-results">Select services and click one of the buttons above</div>';
     }
 
     // Start after auth
     let appStarted = false;
     async function startApp() {
-      if (appStarted) return; // idempotent
+      if (appStarted) return;
       appStarted = true;
       await loadSuppliers();
       initializeServices();
