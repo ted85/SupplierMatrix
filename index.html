@@ -64,7 +64,6 @@
       </div>
       <div class="actions" style="justify-content:space-between;margin-top:8px">
         <button class="btn" id="btnEmailLogin">Sign in</button>
-        <button class="btn alt" id="btnEmailRegister" title="Create account">Register</button>
       </div>
       <div id="loginErr" class="error"></div>
       <div class="muted" style="margin-top:6px">Firebase Authentication (client-side). Authorized domain must include your GitHub Pages URL.</div>
@@ -146,8 +145,6 @@
       try { await signInWithEmailAndPassword(auth, email, pass); }
       catch (e) { loginErr.textContent = e.message; }
     });
-    q('#btnEmailRegister').addEventListener('click', async () => {
-      loginErr.textContent = '';
       const email = q('#loginEmail').value.trim();
       const pass = q('#loginPass').value;
       try { await createUserWithEmailAndPassword(auth, email, pass); }
