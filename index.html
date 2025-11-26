@@ -36,7 +36,7 @@
     .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
     .muted{color:#6b7280}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-    /* Login overlay – visible by default so you never see a blank page */
+    /* Login overlay */
     .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;justify-content:center;align-items:center;z-index:9999}
     .login-card{width:380px;background:#fff;border-radius:14px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
     .login-card h2{margin:0 0 10px 0}
@@ -49,23 +49,12 @@
   <div id="loginOverlay" class="overlay">
     <div class="login-card">
       <h2>Sign in</h2>
-      <div class="row">
-        <button class="btn" id="btnGoogle">Continue with Google</button>
-      </div>
+      <div class="row"><button class="btn" id="btnGoogle">Continue with Google</button></div>
       <div class="row"><div class="muted" style="text-align:center">— or —</div></div>
-      <div class="row">
-        <label for="loginEmail">Email</label>
-        <input id="loginEmail" type="email" autocomplete="username" />
-      </div>
-      <div class="row">
-        <label for="loginPass">Password</label>
-        <input id="loginPass" type="password" autocomplete="current-password" />
-      </div>
-      <div class="actions" style="justify-content:flex-end;margin-top:8px">
-        <button class="btn" id="btnEmailLogin">Sign in</button>
-      </div>
+      <div class="row"><label for="loginEmail">Email</label><input id="loginEmail" type="email" /></div>
+      <div class="row"><label for="loginPass">Password</label><input id="loginPass" type="password" /></div>
+      <div class="actions" style="justify-content:flex-end;margin-top:8px"><button class="btn" id="btnEmailLogin">Sign in</button></div>
       <div id="loginErr" class="error"></div>
-      <div class="muted" style="margin-top:6px">Please contact Tom Edwards if you require an account creating.</div>
     </div>
   </div>
 
@@ -90,7 +79,6 @@
           <button class="btn alt" onclick="clearAll()">🗑️ Clear</button>
         </div>
       </div>
-
       <h4>Services Required:</h4>
       <div class="services-grid" id="servicesGrid"></div>
       <div id="debug" class="debug" hidden>loading…</div>
@@ -98,37 +86,20 @@
 
     <div class="results-section">
       <h3 id="resultsTitle">📋 Matching Suppliers</h3>
-      <div id="results">
-        <div class="no-results">Select services and click one of the buttons above</div>
-      </div>
+      <div id="results"><div class="no-results">Select services and click one of the buttons above</div></div>
     </div>
   </div>
 
-  <script>
-    window.__appBooted = false;
-    setTimeout(() => {
-      if (!window.__appBooted) {
-        const err = document.getElementById('loginErr');
-        if (err) err.textContent = 'App failed to start. Check Console for errors (likely a typo in firebaseConfig).';
-        document.getElementById('loginOverlay').style.display = 'flex';
-      }
-    }, 1500);
-  </script>
-
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, setPersistence, browserLocalPersistence,
-             onAuthStateChanged, signInWithPopup, GoogleAuthProvider,
-             signInWithEmailAndPassword, signOut }
-      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getAuth, setPersistence, browserLocalPersistence, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const q = s => document.querySelector(s);
-    const loginOverlay = q('#loginOverlay');
     const appRoot = q('#app');
+    const loginOverlay = q('#loginOverlay');
     const loginErr = q('#loginErr');
-    const whoami = q('#whoami');
 
-    // ====== PASTE YOUR FIREBASE CONFIG HERE (exactly as given) ======
     const firebaseConfig = {
       apiKey: "AIzaSyCjUNXtUu0mIBOq6GK5QnwzLhVj18KcQ9E",
       authDomain: "testauthentication-7b4d5.firebaseapp.com",
@@ -137,62 +108,31 @@
       messagingSenderId: "175852328677",
       appId: "1:175852328677:web:4e7ea0a66400fa477da60c"
     };
-    // =================================================================
 
-    // Boot
     const appFB = initializeApp(firebaseConfig);
     const auth = getAuth(appFB);
+    const db = getFirestore(appFB); // Init DB
     await setPersistence(auth, browserLocalPersistence);
 
-    // Handlers
-    q('#btnGoogle').addEventListener('click', async () => {
-      loginErr.textContent = '';
-      try { await signInWithPopup(auth, new GoogleAuthProvider()); }
-      catch (e) { loginErr.textContent = e.message; }
-    });
-    q('#btnEmailLogin').addEventListener('click', async () => {
-      loginErr.textContent = '';
-      const email = q('#loginEmail').value.trim();
-      const pass = q('#loginPass').value;
-      try { await signInWithEmailAndPassword(auth, email, pass); }
-      catch (e) { loginErr.textContent = e.message; }
-    });
+    q('#btnGoogle').addEventListener('click', async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { loginErr.textContent = e.message; } });
+    q('#btnEmailLogin').addEventListener('click', async () => { try { await signInWithEmailAndPassword(auth, q('#loginEmail').value.trim(), q('#loginPass').value); } catch (e) { loginErr.textContent = e.message; } });
     q('#btnSignOut').addEventListener('click', async () => { await signOut(auth); });
 
     onAuthStateChanged(auth, (user) => {
       if (user) {
-        whoami.textContent = user.email || user.displayName || '(signed in)';
+        q('#whoami').textContent = user.email || '(signed in)';
         loginOverlay.style.display = 'none';
         appRoot.style.display = 'block';
         startApp();
       } else {
         appRoot.style.display = 'none';
         loginOverlay.style.display = 'flex';
-        loginErr.textContent = '';
       }
-    });
-
-    // mark boot success so fallback doesn’t fire
-    window.__appBooted = true;
-  </script>
-
-  <script>
-    window.addEventListener('error', (e) => {
-      const dbg = document.getElementById('debug');
-      if (!dbg) return;
-      dbg.hidden = false;
-      dbg.innerHTML = `<span class="err">JS error: ${e.message}</span>`;
     });
 
     let suppliers = [];
     const servicesSet = new Set();
-    let lastComputed = [];
-
-    function suppliersUrl() {
-      const u = new URL('suppliers.json', window.location.href);
-      u.searchParams.set('v', Date.now().toString());
-      return u.toString();
-    }
+    const pcCache = new Map(JSON.parse(localStorage.getItem("pcCache") || "[]"));
 
     function normalisePC(pc) {
       if (!pc) return '';
@@ -204,26 +144,32 @@
     }
 
     async function loadSuppliers() {
-      const dbg = document.getElementById('debug');
-      dbg.hidden = false; dbg.textContent = 'Fetching suppliers.json…';
-      const res = await fetch(suppliersUrl(), { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status} fetching suppliers.json`);
-      const raw = await res.json();
+      const dbg = q('#debug');
+      dbg.hidden = false; dbg.textContent = 'Fetching suppliers from Firestore...';
+      try {
+        const snap = await getDocs(collection(db, "suppliers"));
+        suppliers = [];
+        snap.forEach(d => {
+            const data = d.data();
+            suppliers.push({
+                name: data.name || '',
+                postcode: normalisePC(data.postcode),
+                phone: data.phone || '',
+                services: Array.isArray(data.services) ? data.services : []
+            });
+        });
 
-      suppliers = raw.map(r => {
-        const name = r.name ?? r.Supplier ?? r.supplier ?? '';
-        const pc = normalisePC(r.postcode ?? r.Postcode ?? r.POSTCODE ?? '');
-        const phone = r.phone ?? r.Phone ?? ''; // Load Phone
-        const svcs = Array.isArray(r.services) ? r.services.map(s => String(s).trim()) : [];
-        return { name, postcode: pc, phone, services: svcs };
-      }).filter(s => s.name);
-
-      suppliers.forEach(s => s.services.forEach(sv => servicesSet.add(sv)));
-      dbg.textContent = `Dataset loaded: ${suppliers.length} suppliers, ${servicesSet.size} services.`;
+        servicesSet.clear();
+        suppliers.forEach(s => s.services.forEach(sv => servicesSet.add(sv)));
+        dbg.textContent = `Loaded ${suppliers.length} suppliers from cloud.`;
+        initializeServices();
+      } catch (err) {
+        dbg.innerHTML = `<span class="err">Error: ${err.message} (Did you enable Firestore in console?)</span>`;
+      }
     }
 
     function initializeServices() {
-      const grid = document.getElementById('servicesGrid');
+      const grid = q('#servicesGrid');
       grid.innerHTML = '';
       [...servicesSet].sort().forEach(service => {
         const div = document.createElement('div');
@@ -238,128 +184,75 @@
       });
     }
 
-    function getSelectedServices() {
-      return Array.from(document.querySelectorAll('#servicesGrid input[type="checkbox"]:checked'))
-        .map(cb => cb.id.replace('service-',''));
-    }
+    window.findSuppliers = async function(showAll) {
+      const rawPC = q('#postcode').value.trim();
+      const customerPostcode = normalisePC(rawPC);
+      const selected = Array.from(document.querySelectorAll('#servicesGrid input:checked')).map(cb => cb.id.replace('service-',''));
+      const resDiv = q('#results');
 
-    // Geocoding + distance
-    const pcCache = new Map(JSON.parse(localStorage.getItem("pcCache") || "[]"));
-    const saveCache = () => localStorage.setItem("pcCache", JSON.stringify([...pcCache]));
+      if (!rawPC) return resDiv.innerHTML = '<div class="no-results">Enter customer postcode</div>';
+      if (!selected.length) return resDiv.innerHTML = '<div class="no-results">Select at least one service</div>';
+      resDiv.innerHTML = '<div class="loading">🔍 Calculating...</div>';
 
-    async function geocode(postcode) {
-      const pc = normalisePC(postcode);
-      if (!pc) throw new Error("Blank/online postcode");
-      if (pcCache.has(pc)) return pcCache.get(pc);
-      const res = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(pc)}`);
-      const data = await res.json();
-      if (data.status !== 200 || !data.result) throw new Error("Geocode failed for " + pc);
-      const ll = { lat: data.result.latitude, lon: data.result.longitude, pc };
-      pcCache.set(pc, ll); saveCache();
-      return ll;
-    }
+      const matching = suppliers.filter(s => selected.some(sv => s.services.includes(sv)));
+      if (!matching.length) return resDiv.innerHTML = '<div class="no-results">No matches found</div>';
 
-    function haversineKm(a,b){
-      const R=6371,toRad=d=>d*Math.PI/180;
-      const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
-      const la1=toRad(a.lat), la2=toRad(b.lat);
-      const h=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
-      return 2*R*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));
-    }
+      const enriched = await Promise.all(matching.map(async s => {
+        try { const km = await bestDistanceKm(customerPostcode, s.postcode); return { ...s, distance: km }; }
+        catch (e) { return { ...s, distance: null }; }
+      }));
 
-    async function osrmDrivingKm(a, b) {
-      const url = `https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=false`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (!data || data.code !== "Ok" || !data.routes?.length) throw new Error("OSRM failed");
-      return data.routes[0].distance / 1000;
-    }
+      const sorted = enriched.sort((a, b) => {
+        if (a.distance === null) return 1;
+        if (b.distance === null) return -1;
+        return a.distance - b.distance;
+      });
 
-    async function bestDistanceKm(fromPc, toPc) {
-      const [A, B] = await Promise.all([geocode(fromPc), geocode(toPc)]);
-      try { return await osrmDrivingKm(A, B); }
-      catch { return haversineKm(A, B); }
-    }
-
-    function renderResults(items, title) {
-      const resultsDiv = document.getElementById('results');
-      document.getElementById('resultsTitle').textContent = title;
-      if (!items.length) {
-        resultsDiv.innerHTML = '<div class="no-results">No matching suppliers</div>';
-        return;
-      }
-      let html = '';
-      items.forEach((s, i) => {
-        const distText = (s.distance !== null && s.distance !== undefined)
-          ? `${s.distance.toFixed(1)} km`
-          : `N/A${s._err ? ` <em>(distance lookup issue: ${s._err})</em>` : ''}`;
-        
-        // Added Phone display
-        html += `
+      const display = showAll ? sorted : sorted.slice(0, 3);
+      q('#resultsTitle').textContent = showAll ? '📋 All Matching Suppliers' : '📋 Top 3 by Distance';
+      
+      resDiv.innerHTML = display.map((s, i) => `
           <div class="supplier-card">
             <div class="supplier-name">${i + 1}. ${s.name}</div>
             <div class="supplier-details">
               📍 <strong>Postcode:</strong> ${s.postcode || '—'} |
               📞 <strong>Phone:</strong> ${s.phone || '<span class="muted">N/A</span>'} |
-              📏 <strong>Driving distance:</strong> <span class="distance">${distText}</span><br>
+              📏 <strong>Distance:</strong> <span class="distance">${s.distance ? s.distance.toFixed(1) + ' km' : 'N/A'}</span><br>
               🛠️ <strong>Services:</strong> ${s.services.join(', ')}
             </div>
-          </div>`;
-      });
-      resultsDiv.innerHTML = html;
+          </div>`).join('');
+    };
+    
+    window.clearAll = function() {
+       q('#postcode').value = '';
+       document.querySelectorAll('.service-item input').forEach(c => { c.checked = false; c.parentElement.classList.remove('selected'); });
+       q('#results').innerHTML = '<div class="no-results">Select services...</div>';
+    };
+
+    async function geocode(pc) {
+      if (pcCache.has(pc)) return pcCache.get(pc);
+      const res = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(pc)}`);
+      const data = await res.json();
+      if (data.status !== 200) throw new Error();
+      const ll = { lat: data.result.latitude, lon: data.result.longitude };
+      pcCache.set(pc, ll); localStorage.setItem("pcCache", JSON.stringify([...pcCache]));
+      return ll;
+    }
+    async function bestDistanceKm(aPC, bPC) {
+      const [A, B] = await Promise.all([geocode(aPC), geocode(bPC)]);
+      try {
+        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${A.lon},${A.lat};${B.lon},${B.lat}?overview=false`);
+        const data = await res.json();
+        return data.routes[0].distance / 1000;
+      } catch {
+        // Haversine fallback
+        const R=6371, dLat=(B.lat-A.lat)*Math.PI/180, dLon=(B.lon-A.lon)*Math.PI/180;
+        const a=Math.sin(dLat/2)**2+Math.cos(A.lat*Math.PI/180)*Math.cos(B.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+        return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+      }
     }
 
-    async function findSuppliers(showAll) {
-      const rawPC = document.getElementById('postcode').value.trim();
-      const customerPostcode = normalisePC(rawPC);
-      const selectedServices = getSelectedServices();
-      const dbg = document.getElementById('debug');
-      const resultsDiv = document.getElementById('results');
-
-      if (!rawPC) { resultsDiv.innerHTML = '<div class="no-results">Please enter a customer postcode</div>'; return; }
-      if (selectedServices.length === 0) { resultsDiv.innerHTML = '<div class="no-results">Please select at least one service</div>'; return; }
-
-      resultsDiv.innerHTML = '<div class="loading">🔍 Calculating driving distances…</div>';
-
-      const matching = suppliers.filter(s => selectedServices.some(sv => s.services.includes(sv)));
-      if (matching.length === 0) { resultsDiv.innerHTML = `<div class="no-results">No suppliers found for: ${selectedServices.join(', ')}</div>`; return; }
-
-      const enriched = await Promise.all(matching.map(async s => {
-        try { const km = await bestDistanceKm(customerPostcode, s.postcode); return { ...s, distance: km, _err: null }; }
-        catch (err) { return { ...s, distance: null, _err: err?.message || 'distance failed' }; }
-      }));
-
-      const sorted = enriched.sort((a, b) => {
-        if (a.distance === null && b.distance !== null) return 1;
-        if (a.distance !== null && b.distance === null) return -1;
-        if (a.distance === null && b.distance === null) return 0;
-        return a.distance - b.distance;
-      });
-
-      dbg.hidden = false;
-      dbg.innerHTML = `<strong>Debug:</strong> Postcode: <code>${customerPostcode}</code> • Services: ${selectedServices.join(', ')} • Matches: ${sorted.length}`;
-
-      renderResults(showAll ? sorted : sorted.slice(0, 3),
-                    showAll ? '📋 All Matching Suppliers' : '📋 Top 3 by Distance');
-    }
-
-    function clearAll() {
-      document.getElementById('postcode').value = '';
-      document.querySelectorAll('#servicesGrid input[type="checkbox"]').forEach(cb => {
-        cb.checked = false; cb.parentElement.classList.remove('selected');
-      });
-      document.getElementById('results').innerHTML =
-        '<div class="no-results">Select services and click one of the buttons above</div>';
-    }
-
-    // Start after auth
-    let appStarted = false;
-    async function startApp() {
-      if (appStarted) return;
-      appStarted = true;
-      await loadSuppliers();
-      initializeServices();
-    }
+    async function startApp() { await loadSuppliers(); }
   </script>
 </body>
 </html>
