@@ -46,7 +46,6 @@
   </style>
 </head>
 <body>
-  <!-- Auth overlay (shown by default; hidden after auth init) -->
   <div id="loginOverlay" class="overlay">
     <div class="login-card">
       <h2>Sign in</h2>
@@ -105,7 +104,6 @@
     </div>
   </div>
 
-  <!-- Fallback: if the module never boots, show a helpful message -->
   <script>
     window.__appBooted = false;
     setTimeout(() => {
@@ -117,7 +115,6 @@
     }, 1500);
   </script>
 
-  <!-- Firebase v10 modular SDKs -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, setPersistence, browserLocalPersistence,
@@ -179,7 +176,6 @@
     window.__appBooted = true;
   </script>
 
-  <!-- App logic -->
   <script>
     window.addEventListener('error', (e) => {
       const dbg = document.getElementById('debug');
@@ -217,8 +213,9 @@
       suppliers = raw.map(r => {
         const name = r.name ?? r.Supplier ?? r.supplier ?? '';
         const pc = normalisePC(r.postcode ?? r.Postcode ?? r.POSTCODE ?? '');
+        const phone = r.phone ?? r.Phone ?? ''; // Load Phone
         const svcs = Array.isArray(r.services) ? r.services.map(s => String(s).trim()) : [];
-        return { name, postcode: pc, services: svcs };
+        return { name, postcode: pc, phone, services: svcs };
       }).filter(s => s.name);
 
       suppliers.forEach(s => s.services.forEach(sv => servicesSet.add(sv)));
@@ -296,11 +293,14 @@
         const distText = (s.distance !== null && s.distance !== undefined)
           ? `${s.distance.toFixed(1)} km`
           : `N/A${s._err ? ` <em>(distance lookup issue: ${s._err})</em>` : ''}`;
+        
+        // Added Phone display
         html += `
           <div class="supplier-card">
             <div class="supplier-name">${i + 1}. ${s.name}</div>
             <div class="supplier-details">
               📍 <strong>Postcode:</strong> ${s.postcode || '—'} |
+              📞 <strong>Phone:</strong> ${s.phone || '<span class="muted">N/A</span>'} |
               📏 <strong>Driving distance:</strong> <span class="distance">${distText}</span><br>
               🛠️ <strong>Services:</strong> ${s.services.join(', ')}
             </div>
