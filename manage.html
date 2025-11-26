@@ -64,7 +64,6 @@
   </style>
 </head>
 <body>
-  <!-- Auth overlay -->
   <div id="loginOverlay" class="overlay">
     <div class="login-card">
       <h2>Sign in</h2>
@@ -124,19 +123,18 @@
         <thead>
           <tr>
             <th style="width:25%">Supplier Name</th>
-            <th style="width:15%">Postcode</th>
-            <th style="width:45%">Services</th>
+            <th style="width:10%">Postcode</th>
+            <th style="width:15%">Phone</th> <th style="width:35%">Services</th>
             <th style="width:15%">Actions</th>
           </tr>
         </thead>
         <tbody id="supplierTable">
-          <tr><td colspan="4" class="no-data">Loading suppliers...</td></tr>
+          <tr><td colspan="5" class="no-data">Loading suppliers...</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <!-- Add/Edit Modal -->
   <div id="supplierModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
@@ -155,10 +153,12 @@
           <div id="postcodeError" class="error-msg"></div>
         </div>
         <div class="form-group">
+          <label for="supplierPhone">Phone Number</label> <input type="text" id="supplierPhone" placeholder="e.g., 0161 123 4567">
+        </div>
+        <div class="form-group">
           <label>Services</label>
           <div id="servicesChecklist" class="services-checklist">
-            <!-- Services will be populated here -->
-          </div>
+            </div>
         </div>
         <div class="form-group">
           <label for="newService">Add New Service (optional)</label>
@@ -172,7 +172,6 @@
     </div>
   </div>
 
-  <!-- Delete Confirmation Modal -->
   <div id="deleteModal" class="modal">
     <div class="modal-content" style="max-width:400px">
       <div class="modal-header">
@@ -212,7 +211,7 @@
     const loginErr = q('#loginErr');
     const whoami = q('#whoami');
 
-    // Firebase config (same as index.html)
+    // Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyCjUNXtUu0mIBOq6GK5QnwzLhVj18KcQ9E",
       authDomain: "testauthentication-7b4d5.firebaseapp.com",
@@ -286,6 +285,7 @@
         suppliers = raw.map(r => ({
           name: r.name ?? r.Supplier ?? r.supplier ?? '',
           postcode: normalisePC(r.postcode ?? r.Postcode ?? r.POSTCODE ?? ''),
+          phone: r.phone ?? r.Phone ?? '', // Load phone
           services: Array.isArray(r.services) ? r.services.map(s => String(s).trim()) : []
         })).filter(s => s.name);
 
@@ -296,7 +296,7 @@
         renderTable();
       } catch (err) {
         console.error('Load error:', err);
-        q('#supplierTable').innerHTML = `<tr><td colspan="4" class="no-data">Error loading suppliers: ${err.message}</td></tr>`;
+        q('#supplierTable').innerHTML = `<tr><td colspan="5" class="no-data">Error loading suppliers: ${err.message}</td></tr>`;
       }
     }
 
@@ -313,11 +313,12 @@
         !filter || 
         s.name.toLowerCase().includes(lowerFilter) ||
         s.postcode.toLowerCase().includes(lowerFilter) ||
+        (s.phone && s.phone.toLowerCase().includes(lowerFilter)) ||
         s.services.some(sv => sv.toLowerCase().includes(lowerFilter))
       );
 
       if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="no-data">No suppliers found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="no-data">No suppliers found</td></tr>';
         return;
       }
 
@@ -328,6 +329,7 @@
           <tr>
             <td><strong>${s.name}</strong></td>
             <td>${s.postcode || '—'}</td>
+            <td>${s.phone || '<span class="muted">—</span>'}</td>
             <td>${servicesTags || '<span class="muted">None</span>'}</td>
             <td>
               <div class="actions-cell">
@@ -350,6 +352,7 @@
       q('#modalTitle').textContent = 'Add New Supplier';
       q('#supplierName').value = '';
       q('#supplierPostcode').value = '';
+      q('#supplierPhone').value = '';
       q('#newService').value = '';
       q('#nameError').textContent = '';
       q('#postcodeError').textContent = '';
@@ -363,6 +366,7 @@
       q('#modalTitle').textContent = 'Edit Supplier';
       q('#supplierName').value = supplier.name;
       q('#supplierPostcode').value = supplier.postcode;
+      q('#supplierPhone').value = supplier.phone || '';
       q('#newService').value = '';
       q('#nameError').textContent = '';
       q('#postcodeError').textContent = '';
@@ -392,6 +396,7 @@
     window.saveSupplier = function() {
       const name = q('#supplierName').value.trim();
       const postcode = q('#supplierPostcode').value.trim();
+      const phone = q('#supplierPhone').value.trim();
       const newService = q('#newService').value.trim();
       
       // Validation
@@ -425,6 +430,7 @@
       const supplier = {
         name,
         postcode: normalisePC(postcode),
+        phone: phone,
         services: selectedServices
       };
 
