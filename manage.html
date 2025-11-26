@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Manage Suppliers</title>
+  <title>Manage Suppliers (Cloud)</title>
   <style>
     :root { --grad1:#667eea; --grad2:#764ba2; --ink:#2d3748; --muted:#4a5568; }
     *{box-sizing:border-box}
@@ -61,6 +61,9 @@
     .row label{font-weight:600;color:#334155}
     input[type=email],input[type=password]{padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:16px}
     .error{color:#b91c1c;font-size:.9em;min-height:1.2em}
+    
+    /* Import util */
+    .import-banner{background:#fff7ed;border:2px solid #fed7aa;padding:15px;border-radius:10px;margin-bottom:20px;display:none;align-items:center;justify-content:space-between;color:#9a3412}
   </style>
 </head>
 <body>
@@ -83,13 +86,12 @@
         <button class="btn" id="btnEmailLogin">Sign in</button>
       </div>
       <div id="loginErr" class="error"></div>
-      <div class="muted" style="margin-top:6px">Please contact Tom Edwards if you require an account creating.</div>
     </div>
   </div>
 
   <div class="container" id="app" style="display:none">
     <div class="topbar">
-      <h1>⚙️ Manage Suppliers</h1>
+      <h1>⚙️ Manage Suppliers (Cloud)</h1>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <span id="whoami" class="muted"></span>
         <a href="index.html" class="btn alt">← Back to Search</a>
@@ -98,6 +100,11 @@
     </div>
 
     <div id="successMsg" class="success-msg" style="display:none"></div>
+
+    <div id="importBanner" class="import-banner">
+      <div><strong>Database Empty!</strong> Do you want to import your existing <code>suppliers.json</code> file?</div>
+      <button class="btn small success" onclick="importFromJSON()">Import Now</button>
+    </div>
 
     <div class="stats">
       <div class="stat-card">
@@ -112,9 +119,8 @@
 
     <div class="search-bar">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <input type="text" id="searchInput" placeholder="🔍 Search by name, postcode, or service...">
+        <input type="text" id="searchInput" placeholder="🔍 Search by name, postcode, phone or service...">
         <button class="btn success" onclick="openAddModal()">➕ Add New Supplier</button>
-        <button class="btn alt" onclick="exportJSON()">💾 Export JSON</button>
       </div>
     </div>
 
@@ -124,12 +130,13 @@
           <tr>
             <th style="width:25%">Supplier Name</th>
             <th style="width:10%">Postcode</th>
-            <th style="width:15%">Phone</th> <th style="width:35%">Services</th>
+            <th style="width:15%">Phone</th>
+            <th style="width:35%">Services</th>
             <th style="width:15%">Actions</th>
           </tr>
         </thead>
         <tbody id="supplierTable">
-          <tr><td colspan="5" class="no-data">Loading suppliers...</td></tr>
+          <tr><td colspan="5" class="no-data">Loading suppliers from cloud...</td></tr>
         </tbody>
       </table>
     </div>
@@ -142,7 +149,7 @@
         <button class="close-btn" onclick="closeModal()">&times;</button>
       </div>
       <form id="supplierForm" onsubmit="return false;">
-        <div class="form-group">
+        <input type="hidden" id="supplierId"> <div class="form-group">
           <label for="supplierName">Supplier Name *</label>
           <input type="text" id="supplierName" required>
           <div id="nameError" class="error-msg"></div>
@@ -153,12 +160,12 @@
           <div id="postcodeError" class="error-msg"></div>
         </div>
         <div class="form-group">
-          <label for="supplierPhone">Phone Number</label> <input type="text" id="supplierPhone" placeholder="e.g., 0161 123 4567">
+          <label for="supplierPhone">Phone Number</label>
+          <input type="text" id="supplierPhone" placeholder="e.g., 0161 123 4567">
         </div>
         <div class="form-group">
           <label>Services</label>
-          <div id="servicesChecklist" class="services-checklist">
-            </div>
+          <div id="servicesChecklist" class="services-checklist"></div>
         </div>
         <div class="form-group">
           <label for="newService">Add New Service (optional)</label>
@@ -179,7 +186,6 @@
         <button class="close-btn" onclick="closeDeleteModal()">&times;</button>
       </div>
       <p>Are you sure you want to delete <strong id="deleteSupplierName"></strong>?</p>
-      <p style="color:#dc2626;font-size:.9em">This action cannot be undone.</p>
       <div class="modal-actions">
         <button class="btn alt" onclick="closeDeleteModal()">Cancel</button>
         <button class="btn danger" onclick="confirmDelete()">Delete</button>
@@ -191,19 +197,16 @@
     window.__appBooted = false;
     setTimeout(() => {
       if (!window.__appBooted) {
-        const err = document.getElementById('loginErr');
-        if (err) err.textContent = 'App failed to start. Check Console for errors.';
         document.getElementById('loginOverlay').style.display = 'flex';
+        document.getElementById('loginErr').textContent = 'Connection timeout. Check config.';
       }
-    }, 1500);
+    }, 2000);
   </script>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, setPersistence, browserLocalPersistence,
-             onAuthStateChanged, signInWithPopup, GoogleAuthProvider,
-             signInWithEmailAndPassword, signOut }
-      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getAuth, setPersistence, browserLocalPersistence, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const q = s => document.querySelector(s);
     const loginOverlay = q('#loginOverlay');
@@ -211,7 +214,7 @@
     const loginErr = q('#loginErr');
     const whoami = q('#whoami');
 
-    // Firebase config
+    // CONFIG
     const firebaseConfig = {
       apiKey: "AIzaSyCjUNXtUu0mIBOq6GK5QnwzLhVj18KcQ9E",
       authDomain: "testauthentication-7b4d5.firebaseapp.com",
@@ -223,9 +226,10 @@
 
     const appFB = initializeApp(firebaseConfig);
     const auth = getAuth(appFB);
+    const db = getFirestore(appFB); // Init Database
     await setPersistence(auth, browserLocalPersistence);
 
-    // Auth handlers
+    // Auth Handlers
     q('#btnGoogle').addEventListener('click', async () => {
       loginErr.textContent = '';
       try { await signInWithPopup(auth, new GoogleAuthProvider()); }
@@ -233,9 +237,7 @@
     });
     q('#btnEmailLogin').addEventListener('click', async () => {
       loginErr.textContent = '';
-      const email = q('#loginEmail').value.trim();
-      const pass = q('#loginPass').value;
-      try { await signInWithEmailAndPassword(auth, email, pass); }
+      try { await signInWithEmailAndPassword(auth, q('#loginEmail').value.trim(), q('#loginPass').value); }
       catch (e) { loginErr.textContent = e.message; }
     });
     q('#btnSignOut').addEventListener('click', async () => { await signOut(auth); });
@@ -257,16 +259,9 @@
     // Global variables
     let suppliers = [];
     let allServices = new Set();
-    let editingIndex = -1;
-    let deleteIndex = -1;
+    let deleteId = null;
 
-    // Utility functions
-    function suppliersUrl() {
-      const url = new URL(window.location.href);
-      url.pathname = url.pathname.replace(/[^/]*$/, 'suppliers.json');
-      return url.href + '?v=' + Date.now();
-    }
-
+    // Normalise helpers
     function normalisePC(pc) {
       if (!pc) return '';
       const cleaned = String(pc).replace(/\u00A0/g,' ').replace(/\s+/g,' ').trim().toUpperCase();
@@ -276,29 +271,87 @@
       return t.slice(0, t.length-3) + ' ' + t.slice(-3);
     }
 
+    // --- FIRESTORE FUNCTIONS ---
+
     async function loadSuppliers() {
       try {
-        const res = await fetch(suppliersUrl(), { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const raw = await res.json();
+        q('#supplierTable').innerHTML = '<tr><td colspan="5" class="no-data">Loading from cloud...</td></tr>';
         
-        suppliers = raw.map(r => ({
-          name: r.name ?? r.Supplier ?? r.supplier ?? '',
-          postcode: normalisePC(r.postcode ?? r.Postcode ?? r.POSTCODE ?? ''),
-          phone: r.phone ?? r.Phone ?? '', // Load phone
-          services: Array.isArray(r.services) ? r.services.map(s => String(s).trim()) : []
-        })).filter(s => s.name);
+        const querySnapshot = await getDocs(collection(db, "suppliers"));
+        
+        suppliers = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          suppliers.push({
+            id: doc.id,
+            name: data.name || '',
+            postcode: data.postcode || '',
+            phone: data.phone || '',
+            services: Array.isArray(data.services) ? data.services : []
+          });
+        });
+
+        // Sort by name
+        suppliers.sort((a,b) => a.name.localeCompare(b.name));
 
         allServices.clear();
         suppliers.forEach(s => s.services.forEach(sv => allServices.add(sv)));
         
         updateStats();
         renderTable();
+
+        // Check for import
+        if (suppliers.length === 0) {
+          q('#importBanner').style.display = 'flex';
+        } else {
+          q('#importBanner').style.display = 'none';
+        }
+
       } catch (err) {
         console.error('Load error:', err);
-        q('#supplierTable').innerHTML = `<tr><td colspan="5" class="no-data">Error loading suppliers: ${err.message}</td></tr>`;
+        q('#supplierTable').innerHTML = `<tr><td colspan="5" class="no-data">Error loading: ${err.message}</td></tr>`;
       }
     }
+
+    // --- IMPORT LOGIC ---
+    window.importFromJSON = async function() {
+      if (!confirm("This will load 'suppliers.json' and upload it to the database. Continue?")) return;
+      
+      const btn = q('#importBanner button');
+      btn.textContent = "Importing...";
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('suppliers.json');
+        if (!res.ok) throw new Error("Could not find suppliers.json");
+        const json = await res.json();
+        
+        const batch = writeBatch(db);
+        let count = 0;
+        
+        json.forEach(item => {
+          // Normalize legacy keys
+          const name = item.name ?? item.Supplier ?? item.supplier;
+          const pc = normalisePC(item.postcode ?? item.Postcode ?? item.POSTCODE);
+          const ph = item.phone ?? item.Phone ?? '';
+          const svc = Array.isArray(item.services) ? item.services : [];
+
+          if (name) {
+             const docRef = doc(collection(db, "suppliers")); // Auto ID
+             batch.set(docRef, { name, postcode: pc, phone: ph, services: svc });
+             count++;
+          }
+        });
+
+        await batch.commit();
+        showSuccess(`Imported ${count} suppliers successfully!`);
+        await loadSuppliers(); // Reload from DB
+      } catch (e) {
+        alert("Import failed: " + e.message);
+        btn.textContent = "Retry Import";
+        btn.disabled = false;
+      }
+    };
 
     function updateStats() {
       q('#totalSuppliers').textContent = suppliers.length;
@@ -313,7 +366,7 @@
         !filter || 
         s.name.toLowerCase().includes(lowerFilter) ||
         s.postcode.toLowerCase().includes(lowerFilter) ||
-        (s.phone && s.phone.toLowerCase().includes(lowerFilter)) ||
+        s.phone.toLowerCase().includes(lowerFilter) ||
         s.services.some(sv => sv.toLowerCase().includes(lowerFilter))
       );
 
@@ -322,8 +375,7 @@
         return;
       }
 
-      tbody.innerHTML = filtered.map((s, idx) => {
-        const actualIndex = suppliers.indexOf(s);
+      tbody.innerHTML = filtered.map(s => {
         const servicesTags = s.services.map(sv => `<span class="service-tag">${sv}</span>`).join(' ');
         return `
           <tr>
@@ -333,23 +385,22 @@
             <td>${servicesTags || '<span class="muted">None</span>'}</td>
             <td>
               <div class="actions-cell">
-                <button class="btn small alt" onclick="openEditModal(${actualIndex})">✏️ Edit</button>
-                <button class="btn small danger" onclick="openDeleteModal(${actualIndex})">🗑️ Delete</button>
+                <button class="btn small alt" onclick="openEditModal('${s.id}')">✏️ Edit</button>
+                <button class="btn small danger" onclick="openDeleteModal('${s.id}')">🗑️ Delete</button>
               </div>
             </td>
           </tr>`;
       }).join('');
     }
 
-    // Search functionality
     q('#searchInput').addEventListener('input', (e) => {
       renderTable(e.target.value);
     });
 
-    // Modal functions
+    // --- MODAL & SAVING ---
     window.openAddModal = function() {
-      editingIndex = -1;
       q('#modalTitle').textContent = 'Add New Supplier';
+      q('#supplierId').value = ''; // Empty ID = New
       q('#supplierName').value = '';
       q('#supplierPostcode').value = '';
       q('#supplierPhone').value = '';
@@ -360,17 +411,18 @@
       q('#supplierModal').classList.add('show');
     };
 
-    window.openEditModal = function(index) {
-      editingIndex = index;
-      const supplier = suppliers[index];
+    window.openEditModal = function(id) {
+      const s = suppliers.find(x => x.id === id);
+      if(!s) return;
       q('#modalTitle').textContent = 'Edit Supplier';
-      q('#supplierName').value = supplier.name;
-      q('#supplierPostcode').value = supplier.postcode;
-      q('#supplierPhone').value = supplier.phone || '';
+      q('#supplierId').value = s.id;
+      q('#supplierName').value = s.name;
+      q('#supplierPostcode').value = s.postcode;
+      q('#supplierPhone').value = s.phone;
       q('#newService').value = '';
       q('#nameError').textContent = '';
       q('#postcodeError').textContent = '';
-      populateServicesChecklist(supplier.services);
+      populateServicesChecklist(s.services);
       q('#supplierModal').classList.add('show');
     };
 
@@ -381,7 +433,6 @@
     function populateServicesChecklist(selectedServices = []) {
       const container = q('#servicesChecklist');
       const sortedServices = [...allServices].sort();
-      
       container.innerHTML = sortedServices.map(service => {
         const checked = selectedServices.includes(service) ? 'checked' : '';
         const id = `service-${service.replace(/\s+/g, '-')}`;
@@ -393,124 +444,76 @@
       }).join('');
     }
 
-    window.saveSupplier = function() {
+    window.saveSupplier = async function() {
+      const id = q('#supplierId').value;
       const name = q('#supplierName').value.trim();
       const postcode = q('#supplierPostcode').value.trim();
       const phone = q('#supplierPhone').value.trim();
       const newService = q('#newService').value.trim();
       
-      // Validation
-      let hasError = false;
-      if (!name) {
-        q('#nameError').textContent = 'Name is required';
-        hasError = true;
-      } else {
-        q('#nameError').textContent = '';
-      }
-      
-      if (!postcode) {
-        q('#postcodeError').textContent = 'Postcode is required';
-        hasError = true;
-      } else {
-        q('#postcodeError').textContent = '';
-      }
-      
-      if (hasError) return;
+      if (!name) return q('#nameError').textContent = 'Name is required';
+      if (!postcode) return q('#postcodeError').textContent = 'Postcode is required';
 
-      // Get selected services
-      const selectedServices = Array.from(q('#servicesChecklist').querySelectorAll('input[type="checkbox"]:checked'))
-        .map(cb => cb.value);
-      
-      // Add new service if provided
+      const selectedServices = Array.from(q('#servicesChecklist').querySelectorAll('input:checked')).map(cb => cb.value);
       if (newService && !selectedServices.includes(newService)) {
         selectedServices.push(newService);
-        allServices.add(newService);
       }
 
-      const supplier = {
+      const data = {
         name,
         postcode: normalisePC(postcode),
-        phone: phone,
+        phone,
         services: selectedServices
       };
 
-      if (editingIndex >= 0) {
-        suppliers[editingIndex] = supplier;
-        showSuccess('Supplier updated successfully!');
-      } else {
-        suppliers.push(supplier);
-        showSuccess('Supplier added successfully!');
+      try {
+        if (id) {
+          // UPDATE existing
+          await updateDoc(doc(db, "suppliers", id), data);
+          showSuccess('Supplier updated!');
+        } else {
+          // CREATE new
+          await addDoc(collection(db, "suppliers"), data);
+          showSuccess('Supplier added!');
+        }
+        closeModal();
+        loadSuppliers(); // Reload
+      } catch (e) {
+        alert("Error saving: " + e.message);
       }
-
-      // Update services set
-      supplier.services.forEach(sv => allServices.add(sv));
-
-      saveToFile();
-      updateStats();
-      renderTable();
-      closeModal();
     };
 
-    // Delete modal functions
-    window.openDeleteModal = function(index) {
-      deleteIndex = index;
-      q('#deleteSupplierName').textContent = suppliers[index].name;
+    // --- DELETING ---
+    window.openDeleteModal = function(id) {
+      deleteId = id;
+      const s = suppliers.find(x => x.id === id);
+      q('#deleteSupplierName').textContent = s ? s.name : 'this item';
       q('#deleteModal').classList.add('show');
     };
-
     window.closeDeleteModal = function() {
       q('#deleteModal').classList.remove('show');
-      deleteIndex = -1;
+      deleteId = null;
     };
-
-    window.confirmDelete = function() {
-      if (deleteIndex >= 0) {
-        const deleted = suppliers[deleteIndex];
-        suppliers.splice(deleteIndex, 1);
-        
-        // Rebuild services set
-        allServices.clear();
-        suppliers.forEach(s => s.services.forEach(sv => allServices.add(sv)));
-        
-        showSuccess(`${deleted.name} deleted successfully!`);
-        saveToFile();
-        updateStats();
-        renderTable();
+    window.confirmDelete = async function() {
+      if (!deleteId) return;
+      try {
+        await deleteDoc(doc(db, "suppliers", deleteId));
+        showSuccess('Supplier deleted.');
+        closeDeleteModal();
+        loadSuppliers();
+      } catch (e) {
+        alert("Error deleting: " + e.message);
       }
-      closeDeleteModal();
-    };
-
-    // Save to file (downloads JSON)
-    function saveToFile() {
-      const json = JSON.stringify(suppliers, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'suppliers.json';
-      a.click();
-      URL.revokeObjectURL(url);
-      
-      console.log('Supplier list updated. Download the new suppliers.json file and upload it to your server.');
-    }
-
-    window.exportJSON = function() {
-      saveToFile();
-      showSuccess('Supplier list exported! Upload the downloaded file to your server.');
     };
 
     function showSuccess(message) {
       const msg = q('#successMsg');
       msg.textContent = message;
       msg.style.display = 'block';
-      setTimeout(() => { msg.style.display = 'none'; }, 5000);
+      setTimeout(() => { msg.style.display = 'none'; }, 4000);
     }
 
-    // Start app
-    let appStarted = false;
     async function startApp() {
-      if (appStarted) return;
-      appStarted = true;
       await loadSuppliers();
     }
   </script>
